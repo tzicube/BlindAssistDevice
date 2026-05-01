@@ -1,0 +1,128 @@
+# =========================
+
+# Python / Django
+
+# =========================
+
+__pycache__/
+*.py[cod]
+*.log
+*.sqlite3
+
+venv/
+env/
+.venv/
+
+# Sensitive config
+
+.env
+.env.*
+*.env
+!.env.example
+secret_key.txt
+config.py
+
+# =========================
+
+# Frontend / Web
+
+# =========================
+
+node_modules/
+dist/
+build/
+.cache/
+
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# =========================
+
+# Java / Android
+
+# =========================
+
+*.class
+*.jar
+*.war
+*.ear
+
+.gradle/
+build/
+local.properties
+
+# =========================
+
+# ESP32 / C++
+
+# =========================
+
+build/
+*.o
+*.a
+*.elf
+*.bin
+*.map
+
+.pio/
+.pioenvs/
+.pio/build/
+
+# =========================
+
+# AI Models & Data
+
+# =========================
+
+*.pt
+*.onnx
+*.h5
+*.tflite
+
+Data/yolo_models/
+Data/test_audio/
+Data/test_images/
+
+# =========================
+
+# Media files
+
+# =========================
+
+*.wav
+*.mp3
+*.pcm
+*.aac
+*.mp4
+*.avi
+
+# =========================
+
+# IDE / Editor
+
+# =========================
+
+.vscode/
+.idea/
+
+# =========================
+
+# OS
+
+# =========================
+
+.DS_Store
+Thumbs.db
+
+# =========================
+
+# Logs / Temp
+
+# =========================
+
+logs/
+tmp/
+*.tmp
+*.bak
