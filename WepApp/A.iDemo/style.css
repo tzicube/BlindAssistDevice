@@ -1,20 +1,23 @@
 :root {
-  --bg-top: #eef7f3;
-  --bg-bottom: #d9e9f5;
-  --panel: rgba(255, 255, 255, 0.88);
-  --panel-border: rgba(20, 67, 79, 0.14);
-  --text-main: #17303a;
-  --text-soft: #4f6570;
-  --accent: #0e8f72;
-  --accent-dark: #0a6e58;
-  --info-bg: #edf7ff;
-  --info-text: #0d537a;
-  --success-bg: #e9f9f2;
-  --success-text: #146647;
-  --error-bg: #fff1ef;
-  --error-text: #9c2f22;
-  --frame-bg: #07151b;
-  --shadow: 0 22px 60px rgba(25, 54, 62, 0.14);
+  --bg-main: #f5f1e8;
+  --bg-accent: #cfe4dd;
+  --panel: rgba(255, 252, 247, 0.92);
+  --panel-strong: #fffaf2;
+  --border: rgba(53, 73, 62, 0.12);
+  --text-main: #24332e;
+  --text-soft: #627069;
+  --brand: #17795d;
+  --brand-dark: #115a45;
+  --brand-fade: rgba(23, 121, 93, 0.14);
+  --warm: #bf5b33;
+  --info-bg: #eef7f4;
+  --info-text: #175640;
+  --success-bg: #e7f8ee;
+  --success-text: #17613f;
+  --error-bg: #fff0ea;
+  --error-text: #8b3925;
+  --frame-bg: #091015;
+  --shadow: 0 28px 80px rgba(44, 55, 42, 0.12);
 }
 
 * {
@@ -27,101 +30,178 @@ body {
   font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
   color: var(--text-main);
   background:
-    radial-gradient(circle at top left, rgba(14, 143, 114, 0.18), transparent 32%),
-    linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+    radial-gradient(circle at top left, rgba(191, 91, 51, 0.12), transparent 28%),
+    radial-gradient(circle at right center, rgba(23, 121, 93, 0.16), transparent 26%),
+    linear-gradient(180deg, var(--bg-main), var(--bg-accent));
 }
 
 button,
+input,
 select {
   font: inherit;
 }
 
 .app-shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 32px 18px;
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 32px 0 48px;
 }
 
-.camera-card {
-  width: min(920px, 100%);
-  padding: 28px;
-  border: 1px solid var(--panel-border);
-  border-radius: 28px;
+.hero-panel,
+.control-panel,
+.preview-panel {
+  border: 1px solid var(--border);
   background: var(--panel);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(14px);
   box-shadow: var(--shadow);
 }
 
-.eyebrow {
+.hero-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
+  gap: 22px;
+  padding: 28px;
+  border-radius: 30px;
+}
+
+.eyebrow,
+.section-kicker {
   margin: 0 0 10px;
   font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  font-weight: 800;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--accent-dark);
+  color: var(--brand-dark);
+}
+
+h1,
+h2 {
+  margin: 0;
 }
 
 h1 {
-  margin: 0;
-  font-size: clamp(1.9rem, 4vw, 3rem);
-  line-height: 1.05;
+  font-size: clamp(2rem, 4vw, 3.45rem);
+  line-height: 1.02;
+  max-width: 13ch;
+}
+
+h2 {
+  font-size: 1.45rem;
 }
 
 .intro {
-  max-width: 42rem;
-  margin: 12px 0 0;
+  max-width: 50rem;
+  margin: 14px 0 0;
   color: var(--text-soft);
-  line-height: 1.6;
+  line-height: 1.7;
 }
 
-.controls {
+.tips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.tip {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(23, 121, 93, 0.12);
+  color: var(--text-main);
+  font-size: 0.95rem;
+}
+
+.stats-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   gap: 14px;
-  align-items: end;
-  margin-top: 24px;
+}
+
+.stat-card {
+  padding: 18px;
+  border-radius: 22px;
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, 0.92), rgba(239, 247, 242, 0.84));
+  border: 1px solid rgba(23, 121, 93, 0.12);
+}
+
+.stat-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-soft);
+  font-size: 0.92rem;
+}
+
+.stat-value {
+  font-size: 1.35rem;
+  line-height: 1.25;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(320px, 430px) minmax(0, 1fr);
+  gap: 22px;
+  margin-top: 22px;
+}
+
+.control-panel,
+.preview-panel {
+  padding: 24px;
+  border-radius: 28px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
 }
 
 .field {
   display: grid;
   gap: 8px;
+  margin-top: 18px;
 }
 
 .field span {
   font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 
+input,
 select,
 button {
-  min-height: 52px;
-  border-radius: 16px;
-  border: 1px solid rgba(16, 74, 87, 0.18);
+  min-height: 54px;
+  border-radius: 18px;
 }
 
+input,
 select {
   width: 100%;
   padding: 0 16px;
-  background: #fff;
+  border: 1px solid rgba(48, 83, 69, 0.18);
+  background: var(--panel-strong);
   color: var(--text-main);
   outline: none;
 }
 
+input:focus,
 select:focus {
-  border-color: rgba(14, 143, 114, 0.55);
-  box-shadow: 0 0 0 4px rgba(14, 143, 114, 0.12);
+  border-color: rgba(23, 121, 93, 0.48);
+  box-shadow: 0 0 0 4px rgba(23, 121, 93, 0.1);
+}
+
+.camera-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
 }
 
 button {
-  padding: 0 22px;
   border: none;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent), var(--accent-dark));
+  font-weight: 800;
   cursor: pointer;
-  transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
-  box-shadow: 0 10px 24px rgba(14, 143, 114, 0.24);
+  transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
 }
 
 button:hover:not(:disabled) {
@@ -129,17 +209,57 @@ button:hover:not(:disabled) {
 }
 
 button:disabled,
+input:disabled,
 select:disabled {
   cursor: not-allowed;
-  opacity: 0.65;
+  opacity: 0.62;
+}
+
+#startButton,
+.ghost-button,
+.secondary-button {
+  box-shadow: 0 16px 34px rgba(24, 86, 67, 0.12);
+}
+
+#startButton {
+  padding: 0 22px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--brand), var(--brand-dark));
+}
+
+.secondary-button {
+  padding: 0 22px;
+  color: var(--brand-dark);
+  background: rgba(23, 121, 93, 0.08);
+}
+
+.ghost-button {
+  min-height: 46px;
+  padding: 0 16px;
+  color: var(--brand-dark);
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(23, 121, 93, 0.12);
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.helper-text {
+  margin: 16px 0 0;
+  color: var(--text-soft);
+  line-height: 1.65;
 }
 
 .status {
   margin: 18px 0 0;
   padding: 14px 16px;
-  border-radius: 16px;
-  font-weight: 600;
-  line-height: 1.5;
+  border-radius: 18px;
+  line-height: 1.6;
+  font-weight: 700;
   background: var(--info-bg);
   color: var(--info-text);
 }
@@ -154,14 +274,29 @@ select:disabled {
   color: var(--error-text);
 }
 
+.badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: rgba(191, 91, 51, 0.12);
+  color: var(--warm);
+  font-weight: 800;
+}
+
+.badge.live {
+  background: rgba(23, 121, 93, 0.12);
+  color: var(--brand-dark);
+}
+
 .video-frame {
   position: relative;
   overflow: hidden;
   margin-top: 18px;
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 28px;
   background:
-    linear-gradient(145deg, rgba(16, 56, 66, 0.55), rgba(3, 20, 26, 0.88)),
+    linear-gradient(145deg, rgba(16, 27, 31, 0.9), rgba(4, 11, 15, 0.98)),
     var(--frame-bg);
   aspect-ratio: 16 / 9;
 }
@@ -183,28 +318,50 @@ select:disabled {
 .placeholder {
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: 28px;
   text-align: center;
-  color: rgba(235, 247, 250, 0.88);
-  font-size: 1rem;
-  letter-spacing: 0.01em;
+  color: rgba(234, 241, 244, 0.88);
+  line-height: 1.65;
 }
 
 .placeholder.hidden {
   display: none;
 }
 
+@media (max-width: 960px) {
+  .hero-panel,
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 720px) {
-  .camera-card {
-    padding: 22px;
+  .app-shell {
+    width: min(100% - 20px, 100%);
+    padding: 20px 0 28px;
+  }
+
+  .hero-panel,
+  .control-panel,
+  .preview-panel {
+    padding: 20px;
     border-radius: 24px;
   }
 
-  .controls {
+  .panel-header,
+  .camera-grid,
+  .actions {
     grid-template-columns: 1fr;
+    display: grid;
   }
 
-  button {
+  .panel-header {
+    gap: 12px;
+  }
+
+  .ghost-button,
+  #startButton,
+  .secondary-button {
     width: 100%;
   }
 }

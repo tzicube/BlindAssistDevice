@@ -1,46 +1,89 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="vi">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Demo Camera Layer</title>
+  <title>BlindAssist Object Finder</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main class="app-shell">
-    <section class="camera-card">
-      <p class="eyebrow">A.iDemo Frontend</p>
-      <h1>Camera Layer Preview</h1>
-      <p class="intro">
-        Choose an available camera, then start a realtime preview directly in the browser.
-      </p>
+    <section class="workspace">
+      <form id="searchForm" class="control-panel">
+        <div class="panel-header">
+          <div>
+            <p class="section-kicker">Điều khiển</p>
+            <h2>Chọn mục tiêu và camera</h2>
+          </div>
+          <button id="refreshButton" type="button" class="ghost-button">Làm mới camera</button>
+        </div>
 
-      <div class="controls">
-        <label class="field" for="cameraSelect">
-          <span>Camera Input</span>
-          <select id="cameraSelect" aria-label="Select camera input">
-            <option value="">Loading cameras...</option>
-          </select>
+        <label class="field" for="objectInput">
+          <span>Tên đồ vật cần tìm</span>
+          <input
+            id="objectInput"
+            name="object"
+            list="objectSuggestions"
+            placeholder="Ví dụ: bottle, cup, chair, chai, cốc..."
+            autocomplete="off"
+            required
+          >
+          <datalist id="objectSuggestions"></datalist>
         </label>
 
-        <button id="startButton" type="button">Start Camera</button>
-      </div>
+        <div class="camera-grid">
+          <label class="field" for="cameraSelect">
+            <span>Camera server</span>
+            <select id="cameraSelect" name="camera">
+              <option value="0">Camera 0</option>
+            </select>
+          </label>
 
-      <p id="statusMessage" class="status" role="status">
-        Checking available cameras...
-      </p>
-
-      <div class="video-frame">
-        <video
-          id="cameraPreview"
-          autoplay
-          playsinline
-          muted
-        ></video>
-        <div id="videoPlaceholder" class="placeholder">
-          Camera preview will appear here after you start a stream.
+          <label class="field" for="cameraInput">
+            <span>Hoặc nhập chỉ số camera</span>
+            <input
+              id="cameraInput"
+              name="cameraIndex"
+              type="number"
+              min="0"
+              step="1"
+              value="0"
+              inputmode="numeric"
+            >
+          </label>
         </div>
-      </div>
+
+        <div class="actions">
+          <button id="startButton" type="submit">Bắt đầu tìm đồ vật</button>
+          <button id="stopButton" type="button" class="secondary-button" disabled>Dừng stream</button>
+        </div>
+
+        <p class="helper-text">
+          Web app này dùng camera của server Django. Nếu bạn đổi webcam, hãy bấm
+          <strong>Làm mới camera</strong> để tải lại danh sách đầu vào.
+        </p>
+
+        <p id="statusMessage" class="status" role="status">
+          Đang kết nối với server và tải danh sách camera...
+        </p>
+      </form>
+
+      <section class="preview-panel">
+        <div class="panel-header">
+          <div>
+            <p class="section-kicker">Luồng trực tiếp</p>
+            <h2>Khung hình YOLO từ server</h2>
+          </div>
+          <span id="streamBadge" class="badge">Chưa chạy</span>
+        </div>
+
+        <div class="video-frame">
+          <img id="cameraPreview" alt="Realtime object finding stream from the server">
+          <div id="videoPlaceholder" class="placeholder">
+            Stream YOLO sẽ xuất hiện tại đây sau khi bạn chọn đồ vật và bấm bắt đầu.
+          </div>
+        </div>
+      </section>
     </section>
   </main>
 

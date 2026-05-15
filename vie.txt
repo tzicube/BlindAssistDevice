@@ -1,0 +1,32 @@
+2. Bối cảnh và vấn đề
+
+Hiện nay, người khiếm thị gặp rất nhiều khó khăn trong việc di chuyển bên trong nhà hoặc các môi trường quen thuộc. Các loại gậy truyền thống chủ yếu chỉ hỗ trợ tránh vật cản, nhưng chưa thể hỗ trợ điều hướng thông minh hoặc giúp người dùng tìm kiếm các vật dụng cụ thể trong không gian sống.
+
+Do đó, người khiếm thị thường phải phụ thuộc vào người thân hoặc người chăm sóc trong các hoạt động hàng ngày như:
+
+Di chuyển giữa các phòng
+Tìm kiếm đồ dùng cá nhân
+Xác định vị trí các vật dụng trong nhà
+
+Dự án này hướng tới việc xây dựng một hệ thống hỗ trợ người khiếm thị bằng công nghệ trí tuệ nhân tạo (AI), giúp người dùng có thể di chuyển trong nhà và tìm kiếm vật phẩm thông qua nhận diện hình ảnh và hướng dẫn bằng giọng nói theo thời gian thực.
+
+3. Ý tưởng cốt lõi của hệ thống
+
+Hệ thống được thiết kế gồm 3 thành phần chính:
+
+• Thiết bị đeo thông minh
+
+Thiết bị sử dụng ESP32 để truyền video trực tiếp về server và nhận âm thanh hướng dẫn từ hệ thống AI nhằm hỗ trợ người dùng di chuyển và tìm kiếm vật phẩm.
+
+• Web Application
+
+Một WebApp cho phép người thân hoặc người chăm sóc thiết kế sơ đồ cấu trúc trong nhà và đánh dấu các vị trí quan trọng để hỗ trợ việc điều hướng.
+
+• AI Processing Server
+
+Server là trung tâm xử lý chính của hệ thống với 4 nhiệm vụ:
+
+Lưu trữ sơ đồ không gian trong nhà và xử lý đường đi giữa các vị trí.
+Hướng dẫn người dùng di chuyển đến địa điểm mong muốn bằng giọng nói theo thời gian thực.
+Nhận diện vật phẩm cần tìm và hướng dẫn người dùng tiếp cận vật phẩm bằng công nghệ Computer Vision.
+Sử dụng Speech-to-Text (STT), AI xử lý ngôn ngữ và Text-to-Speech (TTS) để hỗ trợ giao tiếp bằng giọng nói với người dùng.
