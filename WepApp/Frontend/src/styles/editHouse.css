@@ -1,0 +1,214 @@
+body {
+  margin: 0;
+
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.editor-layout {
+  display: flex;
+
+  gap: 20px;
+
+  width: 100%;
+
+  min-height: 90vh;
+
+  align-items: flex-start;
+}
+
+.grid-wrapper {
+  flex: 1;
+
+  height: 80vh;
+
+  overflow: auto;
+
+  border: 1px solid #dbeafe;
+
+  border-radius: 16px;
+
+  background: white;
+}
+
+.excel-grid {
+  display: grid;
+
+  width: max-content;
+
+  user-select: none;
+}
+
+.corner-cell {
+  position: sticky;
+
+  top: 0;
+  left: 0;
+
+  z-index: 30;
+
+  width: 60px;
+  height: 40px;
+
+  background: #eff6ff;
+
+  border-right: 1px solid #cbd5e1;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.header-cell {
+  position: sticky;
+
+  top: 0;
+
+  z-index: 20;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #eff6ff;
+
+  font-weight: 600;
+
+  border-right: 1px solid #cbd5e1;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.row-header {
+  position: sticky;
+
+  left: 0;
+
+  z-index: 10;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: #eff6ff;
+
+  font-weight: 600;
+
+  border-right: 1px solid #cbd5e1;
+  border-bottom: 1px solid #cbd5e1;
+
+  width: 60px;
+}
+
+.cell {
+  border-right: 1px solid #e5e7eb;
+  border-bottom: 1px solid #e5e7eb;
+
+  background: white;
+
+  cursor: crosshair;
+
+  transition: 0.05s;
+}
+
+.cell:hover {
+  opacity: 0.8;
+}
+
+/* room colors */
+
+.cell.wall {
+  background: #111827;
+}
+
+.cell.bedroom {
+  background: #60a5fa;
+}
+
+.cell.kitchen {
+  background: #f59e0b;
+}
+
+.cell.bathroom {
+  background: #10b981;
+}
+
+.cell.door {
+  background: #92400e;
+}
+
+/* tool panel */
+
+.tool-panel {
+  width: 260px;
+
+  min-width: 260px;
+
+  background: white;
+
+  border: 1px solid #dbeafe;
+
+  border-radius: 16px;
+
+  padding: 20px;
+}
+
+.tool-panel h3 {
+  margin-top: 0;
+
+  text-align: center;
+}
+
+.tool-panel button {
+  width: 100%;
+
+  padding: 12px;
+
+  border: none;
+
+  border-radius: 10px;
+
+  color: white;
+
+  cursor: pointer;
+
+  font-size: 15px;
+
+  transition: 0.2s;
+}
+
+.tool-panel button:hover {
+  opacity: 0.9;
+}
+
+/* tool colors */
+
+.wall-btn {
+  background: #111827;
+}
+
+.bedroom-btn {
+  background: #60a5fa;
+}
+
+.kitchen-btn {
+  background: #f59e0b;
+}
+
+.bathroom-btn {
+  background: #10b981;
+}
+
+.door-btn {
+  background: #92400e;
+}
+
+.erase-btn {
+  background: #dc2626;
+}
+
+/* active tool */
+
+.active-tool {
+  transform: scale(1.05);
+
+  border: 3px solid white !important;
+
+  box-shadow: 0 0 0 3px #111827;
+}

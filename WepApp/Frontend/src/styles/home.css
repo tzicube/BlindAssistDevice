@@ -1,0 +1,24 @@
+.home-page {
+  display: flex;
+  gap: 24px;
+  margin-top: 24px;
+  align-items: flex-start;
+}
+
+.left-panel {
+  width: 380px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+
+  position: relative;
+  z-index: 20;
+}
+
+.camera-panel {
+  flex: 1;
+
+  position: relative;
+  z-index: 1;
+}
