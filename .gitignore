@@ -1,128 +1,64 @@
-# =========================
+# BlindAssistDevice repo-specific ignore rules
 
-# Python / Django
-
-# =========================
-
+# Python / Django / AI server
 __pycache__/
 *.py[cod]
 *.log
 *.sqlite3
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 venv/
 env/
 .venv/
 
-# Sensitive config
-
+# Local environment and secrets
 .env
 .env.*
-*.env
 !.env.example
 secret_key.txt
-config.py
 
-# =========================
-
-# Frontend / Web
-
-# =========================
-
+# Frontend tooling
 node_modules/
 dist/
-build/
 .cache/
 
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# =========================
-
-# Java / Android
-
-# =========================
-
-*.class
-*.jar
-*.war
-*.ear
-
-.gradle/
-build/
-local.properties
-
-# =========================
-
-# ESP32 / C++
-
-# =========================
-
-build/
+# ESP32 / PlatformIO build output
+.pio/
+.pioenvs/
+.pio/build/
 *.o
 *.a
 *.elf
 *.bin
 *.map
 
-.pio/
-.pioenvs/
-.pio/build/
-
-# =========================
-
-# AI Models & Data
-
-# =========================
-
+# AI model and runtime artifacts
+runs/
 *.pt
 *.onnx
 *.h5
 *.tflite
 
-Data/yolo_models/
-Data/test_audio/
-Data/test_images/
-
-# =========================
-
-# Media files
-
-# =========================
-
+# Generated media and temporary files
 *.wav
 *.mp3
 *.pcm
 *.aac
 *.mp4
 *.avi
-
-# =========================
-
-# IDE / Editor
-
-# =========================
-
-.vscode/
-.idea/
-
-# =========================
-
-# OS
-
-# =========================
-
-.DS_Store
-Thumbs.db
-
-# =========================
-
-# Logs / Temp
-
-# =========================
-
 logs/
 tmp/
 *.tmp
 *.bak
+
+!AiServer/ai_server/core/speech/*.wav
+AiServer/.model_cache/
+AiServer/temp_audio/
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
