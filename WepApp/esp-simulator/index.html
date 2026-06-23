@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESP Simulator</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --panel: rgba(255, 252, 247, 0.92);
+        --panel-strong: #fffdf8;
+        --line: rgba(122, 88, 39, 0.18);
+        --text: #1e293b;
+        --muted: #5f6b7a;
+        --accent: #bb4d00;
+        --ok: #0f766e;
+        --ok-soft: rgba(15, 118, 110, 0.14);
+        --warn: #b45309;
+        --warn-soft: rgba(180, 83, 9, 0.14);
+        --error: #be123c;
+        --error-soft: rgba(190, 18, 60, 0.14);
+        --shadow: 0 18px 45px rgba(85, 56, 21, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Bahnschrift", "Trebuchet MS", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(243, 187, 118, 0.45), transparent 32%),
+          radial-gradient(circle at top right, rgba(52, 211, 153, 0.22), transparent 24%),
+          linear-gradient(135deg, #f8f3ea 0%, #efe2ce 100%);
+      }
+
+      .shell {
+        width: min(1240px, calc(100vw - 32px));
+        margin: 24px auto;
+        display: grid;
+        gap: 18px;
+      }
+
+      .hero {
+        padding: 28px;
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        background: linear-gradient(135deg, rgba(255, 248, 237, 0.94), rgba(255, 255, 255, 0.9));
+        box-shadow: var(--shadow);
+      }
+
+      .hero h1 {
+        margin: 0 0 10px;
+        font-size: clamp(2rem, 3vw, 3rem);
+        line-height: 1;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .hero p {
+        margin: 0;
+        max-width: 760px;
+        color: var(--muted);
+        font-size: 1rem;
+      }
+
+      .config-grid,
+      .main-grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .config-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .main-grid {
+        grid-template-columns: 1.05fr 0.95fr;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        padding: 20px;
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(8px);
+      }
+
+      .card h2,
+      .card h3 {
+        margin: 0 0 8px;
+      }
+
+      .label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+
+      input[type="text"],
+      input[type="file"] {
+        width: 100%;
+        padding: 13px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(122, 88, 39, 0.22);
+        background: var(--panel-strong);
+        font: inherit;
+        color: var(--text);
+      }
+
+      .section-copy {
+        margin: 0 0 16px;
+        color: var(--muted);
+      }
+
+      .button-row,
+      .upload-row,
+      .record-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 12px 18px;
+        font: inherit;
+        font-weight: 700;
+        color: white;
+        background: linear-gradient(135deg, #c2410c, #ea580c);
+        cursor: pointer;
+        transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+        box-shadow: 0 12px 22px rgba(194, 65, 12, 0.22);
+      }
+
+      button:hover:not(:disabled) {
+        transform: translateY(-1px);
+      }
+
+      button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+        box-shadow: none;
+      }
+
+      button.secondary {
+        color: var(--accent);
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(194, 65, 12, 0.16);
+        box-shadow: none;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 42px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(122, 88, 39, 0.16);
+        color: var(--text);
+      }
+
+      .status-pill[data-tone="busy"] {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+
+      .status-pill[data-tone="ok"] {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+
+      .status-pill[data-tone="error"] {
+        background: var(--error-soft);
+        color: var(--error);
+      }
+
+      .preview-shell {
+        margin-top: 16px;
+        position: relative;
+        overflow: hidden;
+        border-radius: 20px;
+        border: 1px solid var(--line);
+        background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(51, 65, 85, 0.92));
+        aspect-ratio: 4 / 3;
+      }
+
+      video,
+      img {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+      }
+
+      .preview-badge {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--text);
+        font-size: 0.85rem;
+      }
+
+      .hint-grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-top: 16px;
+      }
+
+      .hint {
+        padding: 14px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.62);
+        border: 1px solid rgba(122, 88, 39, 0.12);
+      }
+
+      .hint strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .hint p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.94rem;
+      }
+
+      .meta-box {
+        margin-top: 12px;
+        padding: 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.68);
+        border: 1px solid rgba(122, 88, 39, 0.12);
+        color: var(--muted);
+      }
+
+      .counter-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 14px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.84);
+        border: 1px solid rgba(122, 88, 39, 0.12);
+      }
+
+      .counter-chip span:last-child {
+        font-weight: 800;
+        color: var(--accent);
+      }
+
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.84);
+        border: 1px solid rgba(122, 88, 39, 0.12);
+      }
+
+      .toggle input {
+        accent-color: var(--accent);
+      }
+
+      .response-shell {
+        margin-top: 16px;
+        padding: 16px;
+        border-radius: 18px;
+        border: 1px solid rgba(122, 88, 39, 0.12);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      audio {
+        width: 100%;
+        margin-top: 10px;
+      }
+
+      .log-panel {
+        min-height: 220px;
+        max-height: 320px;
+        overflow: auto;
+        padding: 14px;
+        border-radius: 18px;
+        background: #161a22;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-family: "Consolas", "IBM Plex Mono", monospace;
+        color: #ecfdf5;
+      }
+
+      .log-line + .log-line {
+        margin-top: 8px;
+      }
+
+      .log-success {
+        color: #86efac;
+      }
+
+      .log-error {
+        color: #fda4af;
+      }
+
+      .log-info {
+        color: #bfdbfe;
+      }
+
+      .recording-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 12px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid rgba(122, 88, 39, 0.12);
+      }
+
+      .recording-indicator::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: #94a3b8;
+      }
+
+      .recording-indicator[data-state="recording"]::before {
+        background: #ef4444;
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+        animation: pulse 1.2s infinite;
+      }
+
+      .recording-indicator[data-state="ready"]::before {
+        background: #10b981;
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45);
+        }
+        70% {
+          box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+        }
+      }
+
+      @media (max-width: 980px) {
+        .config-grid,
+        .main-grid,
+        .hint-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .shell {
+          width: min(100vw - 20px, 100%);
+          margin: 12px auto 24px;
+        }
+
+        .hero,
+        .card {
+          padding: 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <h1>ESP Simulator</h1>
+        <p>
+          Trang nay dung de test nhanh 2 API moi cua AiServer:
+          <strong>POST /api/videoframe</strong> de cap nhat
+          <strong>last image</strong> va <strong>POST /api/recognize</strong>
+          de gui cau hoi dang WAV, nhan lai audio WAV tu pipeline
+          STT -> Gemma -> TTS.
+        </p>
+      </section>
+
+      <section class="config-grid">
+        <article class="card">
+          <label class="label" for="serverBaseUrl">Server Base URL</label>
+          <input id="serverBaseUrl" type="text" spellcheck="false" />
+        </article>
+        <article class="card">
+          <label class="label" for="videoframePath">Videoframe Path</label>
+          <input id="videoframePath" type="text" spellcheck="false" />
+        </article>
+        <article class="card">
+          <label class="label" for="recognizePath">Recognize Path</label>
+          <input id="recognizePath" type="text" spellcheck="false" />
+        </article>
+      </section>
+
+      <section class="main-grid">
+        <article class="card">
+          <h2>1. Video Frame</h2>
+          <p class="section-copy">
+            Chon mot trong hai cach: bat webcam de stream 10 FPS, hoac upload anh de
+            gui thu cong thanh frame JPEG 320x240.
+          </p>
+
+          <div class="button-row">
+            <button id="startCameraButton" type="button">Start Camera</button>
+            <button id="stopCameraButton" class="secondary" type="button" disabled>
+              Stop Camera
+            </button>
+            <button id="sendFrameButton" class="secondary" type="button" disabled>
+              Send Current Frame
+            </button>
+            <label class="toggle" for="autoStreamCheckbox">
+              <input id="autoStreamCheckbox" type="checkbox" disabled />
+              <span>Auto stream 10 FPS</span>
+            </label>
+          </div>
+
+          <div class="upload-row" style="margin-top: 14px;">
+            <input id="imageFileInput" type="file" accept="image/*" />
+            <button id="uploadImageButton" class="secondary" type="button" disabled>
+              Load Image
+            </button>
+          </div>
+
+          <div class="counter-chip">
+            <span>Frames sent</span>
+            <span id="frameCounter">0</span>
+          </div>
+
+          <div class="meta-box">
+            <div id="streamStatus" class="status-pill">Dang khoi tao...</div>
+            <div id="frameMeta" style="margin-top: 10px;"></div>
+          </div>
+
+          <div class="preview-shell">
+            <span class="preview-badge">320 x 240 preview</span>
+            <video id="cameraPreview" autoplay muted playsinline></video>
+            <img id="imagePreview" alt="Uploaded preview" hidden />
+            <canvas id="frameCanvas" width="320" height="240" hidden></canvas>
+          </div>
+
+          <div class="hint-grid">
+            <div class="hint">
+              <strong>Step 1</strong>
+              <p>Gui it nhat 1 frame truoc khi test recognize, de server co last image.</p>
+            </div>
+            <div class="hint">
+              <strong>Step 2</strong>
+              <p>Neu can test lien tuc, bat camera va checkbox auto stream 10 FPS.</p>
+            </div>
+            <div class="hint">
+              <strong>Step 3</strong>
+              <p>Moi JPEG moi se ghi de frame cu tren server theo dung contract API.</p>
+            </div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>2. Recognize</h2>
+          <p class="section-copy">
+            Ghi cau hoi bang microphone hoac chon file WAV. Server se tra ve audio WAV
+            sau khi chay xong pipeline recognize.
+          </p>
+
+          <div class="record-row">
+            <button id="recordButton" type="button">Start Recording</button>
+            <button id="stopRecordButton" class="secondary" type="button" disabled>
+              Stop Recording
+            </button>
+          </div>
+
+          <div class="recording-indicator" id="recordingIndicator">
+            Chua ghi am.
+          </div>
+
+          <div class="upload-row" style="margin-top: 14px;">
+            <input id="audioFileInput" type="file" accept=".wav,audio/wav,audio/x-wav" />
+            <button id="sendRecognizeButton" type="button" disabled>
+              Send Recognize
+            </button>
+          </div>
+
+          <div class="meta-box">
+            <div id="recognizeStatus" class="status-pill">Dang khoi tao...</div>
+            <div id="audioMeta" style="margin-top: 10px;"></div>
+          </div>
+
+          <div class="response-shell">
+            <h3>Response Audio</h3>
+            <p id="responseMeta" class="section-copy" style="margin-bottom: 0;">
+              Chua co response.
+            </p>
+            <audio id="responseAudio" controls></audio>
+            <div class="button-row" style="margin-top: 12px;">
+              <button
+                id="downloadResponseButton"
+                class="secondary"
+                type="button"
+                disabled
+              >
+                Download Response WAV
+              </button>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2>3. Activity Log</h2>
+        <p class="section-copy">
+          Log tong hop cho camera, upload frame, recognize request, va response audio.
+        </p>
+        <div id="activityLog" class="log-panel"></div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
