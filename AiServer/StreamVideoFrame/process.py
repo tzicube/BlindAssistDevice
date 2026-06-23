@@ -1,6 +1,6 @@
 import logging
 
-from last_image_store import get_last_image_path, store_last_image_bytes
+from imageProcess.last_image_store import get_last_image_path, store_last_image_bytes
 
 
 logger = logging.getLogger("blind_assist.stream_video_frame")

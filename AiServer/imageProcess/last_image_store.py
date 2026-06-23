@@ -21,17 +21,9 @@ def get_last_image_path() -> Path:
 
 
 def load_last_image_bytes() -> bytes | None:
-    global _last_image_bytes
-
     with _last_image_lock:
-        if _last_image_bytes is not None:
-            return bytes(_last_image_bytes)
-
-        if not LAST_IMAGE_PATH.exists():
+        if _last_image_bytes is None:
             return None
-
-        logger.info("Loading last image from disk: %s", LAST_IMAGE_PATH)
-        _last_image_bytes = LAST_IMAGE_PATH.read_bytes()
         return bytes(_last_image_bytes)
 
 
@@ -45,24 +37,38 @@ def store_last_image_bytes(image_bytes: bytes) -> Path:
 
     with _last_image_lock:
         _last_image_bytes = image_bytes
-        LAST_IMAGE_PATH.parent.mkdir(parents=True, exist_ok=True)
 
         logger.info(
-            "Updating last image store | path=%s | payload_size=%s bytes",
+            "Updating in-memory last image store | path=%s | payload_size=%s bytes",
             LAST_IMAGE_PATH,
             len(image_bytes),
         )
-
-        persisted_to_disk = _persist_last_image_to_disk(image_bytes)
-
-        if persisted_to_disk:
-            logger.info("Last image persisted to disk successfully")
-        else:
-            logger.warning(
-                "Last image is available in memory only because disk persistence is locked"
-            )
-
         return LAST_IMAGE_PATH
+
+
+def persist_last_image_bytes() -> Path | None:
+    with _last_image_lock:
+        if _last_image_bytes is None:
+            logger.info("Skipping last image persistence because no in-memory frame exists")
+            return None
+
+        image_bytes = bytes(_last_image_bytes)
+
+    LAST_IMAGE_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    logger.info(
+        "Persisting final in-memory last image to disk | path=%s | payload_size=%s bytes",
+        LAST_IMAGE_PATH,
+        len(image_bytes),
+    )
+
+    persisted_to_disk = _persist_last_image_to_disk(image_bytes)
+
+    if not persisted_to_disk:
+        raise OSError(f"Could not persist last image to disk: {LAST_IMAGE_PATH}")
+
+    logger.info("Final last image persisted to disk successfully")
+    return LAST_IMAGE_PATH
 
 
 def _persist_last_image_to_disk(image_bytes: bytes) -> bool:

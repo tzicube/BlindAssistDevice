@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from speech.stt import WhisperSTT
     from speech.tts import PiperTTS
 
-from last_image_store import get_last_image_path, load_last_image_bytes
+from imageProcess.last_image_store import get_last_image_path, load_last_image_bytes
 
 
 logger = logging.getLogger("blind_assist.recognize")
