@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FE Simulator</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg-1: #eef6f1;
+        --bg-2: #dbe8de;
+        --panel: rgba(255, 255, 255, 0.86);
+        --panel-strong: #ffffff;
+        --line: rgba(32, 78, 57, 0.14);
+        --text: #14221c;
+        --muted: #5f6f67;
+        --accent: #0f766e;
+        --accent-soft: rgba(15, 118, 110, 0.12);
+        --warn: #b45309;
+        --warn-soft: rgba(180, 83, 9, 0.12);
+        --error: #be123c;
+        --error-soft: rgba(190, 18, 60, 0.12);
+        --shadow: 0 24px 56px rgba(41, 78, 59, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Bahnschrift", "Trebuchet MS", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(110, 231, 183, 0.22), transparent 30%),
+          radial-gradient(circle at top right, rgba(251, 191, 36, 0.18), transparent 26%),
+          linear-gradient(140deg, var(--bg-1), var(--bg-2));
+      }
+
+      .shell {
+        width: min(1080px, calc(100vw - 32px));
+        margin: 24px auto 32px;
+        display: grid;
+        gap: 18px;
+      }
+
+      .hero,
+      .card {
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 26px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        backdrop-filter: blur(8px);
+      }
+
+      .hero h1,
+      .card h2 {
+        margin: 0 0 8px;
+      }
+
+      .hero h1 {
+        font-size: clamp(2rem, 3vw, 3rem);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+
+      .hero p,
+      .section-copy {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .config-grid,
+      .content-grid,
+      .metrics-grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .config-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .content-grid {
+        grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+      }
+
+      .metrics-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      input[type="text"] {
+        width: 100%;
+        padding: 13px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(32, 78, 57, 0.16);
+        background: var(--panel-strong);
+        font: inherit;
+        color: var(--text);
+      }
+
+      .preview-shell {
+        position: relative;
+        overflow: hidden;
+        border-radius: 24px;
+        border: 1px solid var(--line);
+        background: linear-gradient(180deg, #091410, #13211c);
+        aspect-ratio: 4 / 3;
+      }
+
+      .preview-shell img {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+      }
+
+      .preview-badge {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.9);
+        color: #102018;
+        font-size: 0.84rem;
+      }
+
+      .preview-badge::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #ef4444;
+      }
+
+      .preview-overlay {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.78);
+        background:
+          linear-gradient(180deg, rgba(9, 20, 16, 0.2), rgba(9, 20, 16, 0.82)),
+          repeating-linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.02) 0,
+            rgba(255, 255, 255, 0.02) 2px,
+            transparent 2px,
+            transparent 7px
+          );
+      }
+
+      .preview-shell[data-live="true"] .preview-overlay {
+        display: none;
+      }
+
+      .status-pill,
+      .metric-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 42px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(32, 78, 57, 0.14);
+        background: rgba(255, 255, 255, 0.76);
+      }
+
+      .status-pill[data-tone="ok"] {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+
+      .status-pill[data-tone="busy"] {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+
+      .status-pill[data-tone="error"] {
+        background: var(--error-soft);
+        color: var(--error);
+      }
+
+      .metric-chip {
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .metric-chip strong {
+        color: var(--accent);
+      }
+
+      .meta-box,
+      .log-panel {
+        margin-top: 14px;
+      }
+
+      .meta-box {
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.74);
+        border: 1px solid rgba(32, 78, 57, 0.12);
+      }
+
+      .log-panel {
+        min-height: 220px;
+        max-height: 320px;
+        overflow: auto;
+        padding: 14px;
+        border-radius: 18px;
+        background: #161a22;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-family: "Consolas", "IBM Plex Mono", monospace;
+        color: #ecfdf5;
+      }
+
+      .log-line + .log-line {
+        margin-top: 8px;
+      }
+
+      .log-success {
+        color: #86efac;
+      }
+
+      .log-error {
+        color: #fda4af;
+      }
+
+      .log-info {
+        color: #bfdbfe;
+      }
+
+      .note-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .note {
+        padding: 14px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.68);
+        border: 1px solid rgba(32, 78, 57, 0.12);
+      }
+
+      .note strong {
+        display: block;
+        margin-bottom: 6px;
+      }
+
+      .note p {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      @media (max-width: 900px) {
+        .config-grid,
+        .content-grid,
+        .metrics-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .shell {
+          width: min(100vw - 20px, 100%);
+          margin: 12px auto 24px;
+        }
+
+        .hero,
+        .card {
+          padding: 18px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <h1>FE Simulator</h1>
+        <p>
+          Trang nay chi co mot viec: lien tuc goi <strong>GET /api/image</strong> moi
+          <strong>100ms</strong> de lay khung hinh moi nhat tu server va hien thi ra ngoai.
+        </p>
+      </section>
+
+      <section class="config-grid">
+        <article class="card">
+          <label class="label" for="serverBaseUrl">Server Base URL</label>
+          <input id="serverBaseUrl" type="text" spellcheck="false" />
+        </article>
+        <article class="card">
+          <label class="label" for="imagePath">Image Path</label>
+          <input id="imagePath" type="text" spellcheck="false" />
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="card">
+          <h2>Live Preview</h2>
+          <p class="section-copy">
+            Viewer nay tu dong poll anh tu server. Khong can bam nut nao sau khi trang da mo.
+          </p>
+
+          <div class="preview-shell" id="previewShell" data-live="false">
+            <span class="preview-badge">GET /api/image @ 10 FPS</span>
+            <img id="liveImage" alt="Latest camera frame from server" />
+            <div id="previewOverlay" class="preview-overlay">
+              Dang cho server co frame dau tien trong RAM...
+            </div>
+          </div>
+
+          <div class="meta-box">
+            <div id="viewerStatus" class="status-pill">Dang khoi tao...</div>
+            <div id="imageMeta" style="margin-top: 10px;"></div>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>Polling State</h2>
+          <p class="section-copy">
+            Trang thai request, thong tin frame moi nhat va mot vai ghi chu de test nhanh.
+          </p>
+
+          <div class="metrics-grid">
+            <div class="metric-chip">
+              <span>Frames received</span>
+              <strong id="frameCount">0</strong>
+            </div>
+            <div class="metric-chip">
+              <span>Last update</span>
+              <strong id="lastUpdate">--:--:--</strong>
+            </div>
+          </div>
+
+          <div class="note-list">
+            <div class="note">
+              <strong>404 la binh thuong</strong>
+              <p>Khi server chua nhan duoc frame nao tu ESP, /api/image se tra ve 404.</p>
+            </div>
+            <div class="note">
+              <strong>Khong cache</strong>
+              <p>Trang fetch blob moi o moi nhip va thay anh ngay khi co frame moi trong RAM.</p>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2>Activity Log</h2>
+        <p class="section-copy">
+          Log ngan gon cho polling loop, frame moi va cac loi ket noi neu co.
+        </p>
+        <div id="activityLog" class="log-panel"></div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

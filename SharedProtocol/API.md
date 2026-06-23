@@ -2,8 +2,8 @@
 
 # Request:
 Content-Type: image/jpeg
-320x240
-10 FPS
+320x40
+10 FPS2
 # Response:
 application/json
 {
@@ -12,7 +12,7 @@ application/json
 ## Workflow
 Continuously send images to the server, so the server can send the images to the web application.
 
-
+# ===============================================================================================
 # POST /api/recognize
 
 ## Request
@@ -32,3 +32,17 @@ The server uses Speech-to-Text (STT) to convert the recorded audio into text. Th
 The AI analyzes the latest frame together with the user's question and generates an appropriate textual response. This response is then converted into speech using Text-to-Speech (TTS).
 
 Finally, the server returns the generated audio response in WAV format, allowing the user to hear the answer through the device speaker.
+
+# ===============================================================================================
+# GET /api/image
+
+Response:
+Content-Type: image/jpeg
+Cache-Control: no-store
+
+Body:
+JPEG image bytes
+Resolution: 320x240
+
+## Workflow
+Return the latest frame received from ESP32.

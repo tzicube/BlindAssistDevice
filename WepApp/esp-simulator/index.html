@@ -7,19 +7,24 @@
     <style>
       :root {
         color-scheme: light;
-        --panel: rgba(255, 252, 247, 0.92);
+        --bg-1: #f6efe2;
+        --bg-2: #dfd4c1;
+        --panel: rgba(255, 250, 240, 0.9);
         --panel-strong: #fffdf8;
-        --line: rgba(122, 88, 39, 0.18);
-        --text: #1e293b;
+        --line: rgba(104, 74, 28, 0.15);
+        --text: #1f2937;
         --muted: #5f6b7a;
-        --accent: #bb4d00;
+        --accent: #bc4c12;
+        --accent-deep: #8d2f00;
         --ok: #0f766e;
         --ok-soft: rgba(15, 118, 110, 0.14);
         --warn: #b45309;
         --warn-soft: rgba(180, 83, 9, 0.14);
         --error: #be123c;
         --error-soft: rgba(190, 18, 60, 0.14);
-        --shadow: 0 18px 45px rgba(85, 56, 21, 0.12);
+        --device: #24211d;
+        --device-edge: #3f352a;
+        --shadow: 0 24px 70px rgba(54, 37, 15, 0.18);
       }
 
       * {
@@ -32,43 +37,50 @@
         font-family: "Bahnschrift", "Trebuchet MS", sans-serif;
         color: var(--text);
         background:
-          radial-gradient(circle at top left, rgba(243, 187, 118, 0.45), transparent 32%),
-          radial-gradient(circle at top right, rgba(52, 211, 153, 0.22), transparent 24%),
-          linear-gradient(135deg, #f8f3ea 0%, #efe2ce 100%);
+          radial-gradient(circle at top left, rgba(250, 204, 153, 0.55), transparent 32%),
+          radial-gradient(circle at top right, rgba(74, 222, 128, 0.18), transparent 26%),
+          linear-gradient(135deg, var(--bg-1), var(--bg-2));
       }
 
       .shell {
         width: min(1240px, calc(100vw - 32px));
-        margin: 24px auto;
+        margin: 24px auto 32px;
         display: grid;
         gap: 18px;
       }
 
+      .hero,
+      .card,
+      .device {
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+
       .hero {
         padding: 28px;
-        border: 1px solid var(--line);
-        border-radius: 24px;
-        background: linear-gradient(135deg, rgba(255, 248, 237, 0.94), rgba(255, 255, 255, 0.9));
-        box-shadow: var(--shadow);
+        border-radius: 28px;
+        background: linear-gradient(135deg, rgba(255, 248, 237, 0.96), rgba(255, 255, 255, 0.92));
       }
 
       .hero h1 {
         margin: 0 0 10px;
         font-size: clamp(2rem, 3vw, 3rem);
         line-height: 1;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
       }
 
       .hero p {
         margin: 0;
-        max-width: 760px;
+        max-width: 860px;
         color: var(--muted);
-        font-size: 1rem;
+        line-height: 1.55;
       }
 
       .config-grid,
-      .main-grid {
+      .content-grid,
+      .device-grid,
+      .telemetry-grid {
         display: grid;
         gap: 18px;
       }
@@ -77,22 +89,36 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
       }
 
-      .main-grid {
-        grid-template-columns: 1.05fr 0.95fr;
+      .content-grid {
+        grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+      }
+
+      .device-grid {
+        grid-template-columns: minmax(0, 1.05fr) minmax(260px, 0.95fr);
+        align-items: stretch;
+      }
+
+      .telemetry-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .card {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 22px;
         padding: 20px;
-        box-shadow: var(--shadow);
+        border-radius: 24px;
+        background: var(--panel);
         backdrop-filter: blur(8px);
       }
 
       .card h2,
-      .card h3 {
+      .card h3,
+      .device-copy h2 {
         margin: 0 0 8px;
+      }
+
+      .section-copy {
+        margin: 0 0 16px;
+        color: var(--muted);
+        line-height: 1.55;
       }
 
       .label {
@@ -104,8 +130,7 @@
         text-transform: uppercase;
       }
 
-      input[type="text"],
-      input[type="file"] {
+      input[type="text"] {
         width: 100%;
         padding: 13px 14px;
         border-radius: 14px;
@@ -115,48 +140,236 @@
         color: var(--text);
       }
 
-      .section-copy {
-        margin: 0 0 16px;
-        color: var(--muted);
+      .device {
+        padding: 22px;
+        border-radius: 32px;
+        background:
+          radial-gradient(circle at top, rgba(255, 255, 255, 0.08), transparent 24%),
+          linear-gradient(160deg, var(--device) 0%, #161412 100%);
+        color: #f8fafc;
       }
 
-      .button-row,
-      .upload-row,
-      .record-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
+      .device-copy p {
+        margin: 0;
+        color: rgba(248, 250, 252, 0.72);
+        line-height: 1.55;
+      }
+
+      .device-copy .eyebrow {
+        display: inline-flex;
         align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
       }
 
-      button {
-        border: 0;
+      .preview-shell {
+        position: relative;
+        min-height: 100%;
+        overflow: hidden;
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: linear-gradient(180deg, #08131f, #0f172a);
+        aspect-ratio: 4 / 3;
+      }
+
+      video {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+      }
+
+      .preview-badge {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
         border-radius: 999px;
-        padding: 12px 18px;
+        background: rgba(248, 250, 252, 0.88);
+        color: #111827;
+        font-size: 0.84rem;
+      }
+
+      .preview-badge::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #ef4444;
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.42);
+        animation: pulse 1.2s infinite;
+      }
+
+      .preview-offline {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        text-align: center;
+        color: rgba(248, 250, 252, 0.72);
+        background:
+          linear-gradient(180deg, rgba(2, 6, 23, 0.18), rgba(2, 6, 23, 0.78)),
+          repeating-linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.02) 0,
+            rgba(255, 255, 255, 0.02) 2px,
+            transparent 2px,
+            transparent 7px
+          );
+      }
+
+      .preview-shell[data-online="true"] .preview-offline {
+        display: none;
+      }
+
+      .button-column {
+        display: grid;
+        gap: 14px;
+        align-content: start;
+      }
+
+      .device-button {
+        position: relative;
+        overflow: hidden;
+        display: grid;
+        gap: 10px;
+        width: 100%;
+        min-height: 148px;
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 24px;
+        background: linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+        color: inherit;
         font: inherit;
-        font-weight: 700;
-        color: white;
-        background: linear-gradient(135deg, #c2410c, #ea580c);
+        text-align: left;
         cursor: pointer;
         transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
-        box-shadow: 0 12px 22px rgba(194, 65, 12, 0.22);
       }
 
-      button:hover:not(:disabled) {
+      .device-button:hover:not(:disabled) {
         transform: translateY(-1px);
       }
 
-      button:disabled {
-        opacity: 0.45;
+      .device-button:disabled {
+        opacity: 0.55;
         cursor: not-allowed;
-        box-shadow: none;
       }
 
-      button.secondary {
+      .device-button::after {
+        content: "";
+        position: absolute;
+        inset: auto -32px -32px auto;
+        width: 120px;
+        height: 120px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .device-button-power[data-state="on"] {
+        box-shadow: 0 16px 40px rgba(16, 185, 129, 0.18);
+      }
+
+      .device-button-recognize[data-state="recording"] {
+        box-shadow: 0 16px 40px rgba(239, 68, 68, 0.18);
+      }
+
+      .device-button-recognize[data-state="busy"] {
+        box-shadow: 0 16px 40px rgba(245, 158, 11, 0.18);
+      }
+
+      .button-kicker {
+        font-size: 0.8rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(248, 250, 252, 0.66);
+      }
+
+      .button-label {
+        font-size: 1.8rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+      }
+
+      .button-help {
+        max-width: 20ch;
+        color: rgba(248, 250, 252, 0.74);
+        line-height: 1.45;
+      }
+
+      .button-state {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        padding: 7px 11px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .device-button-power[data-state="on"] .button-state {
+        background: rgba(16, 185, 129, 0.18);
+        color: #a7f3d0;
+      }
+
+      .device-button-recognize[data-state="recording"] .button-state {
+        background: rgba(239, 68, 68, 0.18);
+        color: #fecdd3;
+      }
+
+      .device-button-recognize[data-state="busy"] .button-state {
+        background: rgba(245, 158, 11, 0.18);
+        color: #fde68a;
+      }
+
+      .metric-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .metric-chip,
+      .recording-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(122, 88, 39, 0.12);
+      }
+
+      .metric-chip {
+        background: rgba(255, 255, 255, 0.8);
+      }
+
+      .metric-chip strong {
         color: var(--accent);
-        background: rgba(255, 255, 255, 0.9);
-        border: 1px solid rgba(194, 65, 12, 0.16);
-        box-shadow: none;
+      }
+
+      .meta-box,
+      .response-shell {
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(122, 88, 39, 0.12);
+      }
+
+      .meta-box + .meta-box,
+      .response-shell,
+      .log-panel {
+        margin-top: 14px;
       }
 
       .status-pill {
@@ -185,105 +398,26 @@
         color: var(--error);
       }
 
-      .preview-shell {
-        margin-top: 16px;
-        position: relative;
-        overflow: hidden;
-        border-radius: 20px;
-        border: 1px solid var(--line);
-        background: linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(51, 65, 85, 0.92));
-        aspect-ratio: 4 / 3;
+      .recording-indicator {
+        background: rgba(255, 255, 255, 0.82);
       }
 
-      video,
-      img {
-        width: 100%;
-        height: 100%;
-        display: block;
-        object-fit: cover;
-      }
-
-      .preview-badge {
-        position: absolute;
-        top: 14px;
-        left: 14px;
-        padding: 8px 12px;
+      .recording-indicator::before {
+        content: "";
+        width: 10px;
+        height: 10px;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.9);
-        color: var(--text);
-        font-size: 0.85rem;
+        background: #94a3b8;
       }
 
-      .hint-grid {
-        display: grid;
-        gap: 10px;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        margin-top: 16px;
+      .recording-indicator[data-state="recording"]::before {
+        background: #ef4444;
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.42);
+        animation: pulse 1.2s infinite;
       }
 
-      .hint {
-        padding: 14px;
-        border-radius: 18px;
-        background: rgba(255, 255, 255, 0.62);
-        border: 1px solid rgba(122, 88, 39, 0.12);
-      }
-
-      .hint strong {
-        display: block;
-        margin-bottom: 6px;
-      }
-
-      .hint p {
-        margin: 0;
-        color: var(--muted);
-        font-size: 0.94rem;
-      }
-
-      .meta-box {
-        margin-top: 12px;
-        padding: 14px;
-        border-radius: 16px;
-        background: rgba(255, 255, 255, 0.68);
-        border: 1px solid rgba(122, 88, 39, 0.12);
-        color: var(--muted);
-      }
-
-      .counter-chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        margin-top: 14px;
-        padding: 10px 14px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.84);
-        border: 1px solid rgba(122, 88, 39, 0.12);
-      }
-
-      .counter-chip span:last-child {
-        font-weight: 800;
-        color: var(--accent);
-      }
-
-      .toggle {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        padding: 10px 14px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.84);
-        border: 1px solid rgba(122, 88, 39, 0.12);
-      }
-
-      .toggle input {
-        accent-color: var(--accent);
-      }
-
-      .response-shell {
-        margin-top: 16px;
-        padding: 16px;
-        border-radius: 18px;
-        border: 1px solid rgba(122, 88, 39, 0.12);
-        background: rgba(255, 255, 255, 0.72);
+      .recording-indicator[data-state="ready"]::before {
+        background: #10b981;
       }
 
       audio {
@@ -319,38 +453,19 @@
         color: #bfdbfe;
       }
 
-      .recording-indicator {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        margin-top: 12px;
-        padding: 10px 14px;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.82);
-        border: 1px solid rgba(122, 88, 39, 0.12);
+      .mini-note {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
       }
 
-      .recording-indicator::before {
-        content: "";
-        width: 10px;
-        height: 10px;
-        border-radius: 999px;
-        background: #94a3b8;
-      }
-
-      .recording-indicator[data-state="recording"]::before {
-        background: #ef4444;
-        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
-        animation: pulse 1.2s infinite;
-      }
-
-      .recording-indicator[data-state="ready"]::before {
-        background: #10b981;
+      canvas {
+        display: none;
       }
 
       @keyframes pulse {
         0% {
-          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.45);
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.42);
         }
         70% {
           box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
@@ -360,21 +475,29 @@
         }
       }
 
-      @media (max-width: 980px) {
+      @media (max-width: 1080px) {
         .config-grid,
-        .main-grid,
-        .hint-grid {
+        .content-grid,
+        .device-grid,
+        .telemetry-grid {
           grid-template-columns: 1fr;
         }
+      }
 
+      @media (max-width: 720px) {
         .shell {
           width: min(100vw - 20px, 100%);
           margin: 12px auto 24px;
         }
 
         .hero,
-        .card {
+        .card,
+        .device {
           padding: 18px;
+        }
+
+        .button-label {
+          font-size: 1.55rem;
         }
       }
     </style>
@@ -384,11 +507,11 @@
       <section class="hero">
         <h1>ESP Simulator</h1>
         <p>
-          Trang nay dung de test nhanh 2 API moi cua AiServer:
-          <strong>POST /api/videoframe</strong> de cap nhat
-          <strong>last image</strong> va <strong>POST /api/recognize</strong>
-          de gui cau hoi dang WAV, nhan lai audio WAV tu pipeline
-          STT -> Gemma -> TTS.
+          Simulator nay mo phong dung hanh vi cua thiet bi ESP trong
+          <strong>SharedProtocol</strong>: <strong>Power</strong> khoi dong task stream
+          JPEG 10 FPS len <strong>POST /api/videoframe</strong>, con
+          <strong>Recognize</strong> bam lan 1 de ghi am, bam lan 2 de gui
+          <strong>POST /api/recognize</strong> va phat audio response ngay khi server tra ve.
         </p>
       </section>
 
@@ -407,91 +530,78 @@
         </article>
       </section>
 
-      <section class="main-grid">
-        <article class="card">
-          <h2>1. Video Frame</h2>
+      <section class="content-grid">
+        <section class="device">
+          <div class="device-copy">
+            <div class="eyebrow">ESP Device Startup</div>
+            <h2>Two Parallel Tasks</h2>
+            <p>
+              Task 1 lien tuc stream webcam thanh frame 320x240. Task 2 theo doi nut
+              Recognize de thu am cau hoi, gui len server va nhan audio WAV tra ve.
+            </p>
+          </div>
+
+          <div class="device-grid" style="margin-top: 18px;">
+            <div class="preview-shell" id="previewShell" data-online="false">
+              <span class="preview-badge">Camera task @ 10 FPS</span>
+              <video id="cameraPreview" autoplay muted playsinline></video>
+              <div class="preview-offline">
+                Bam nut Power de bat webcam va stream frame len server.
+              </div>
+              <canvas id="frameCanvas" width="320" height="240"></canvas>
+            </div>
+
+            <div class="button-column">
+              <button
+                id="powerButton"
+                class="device-button device-button-power"
+                data-state="off"
+                type="button"
+              >
+                <span class="button-kicker">Task 1 / Video Streaming</span>
+                <span class="button-label">Power</span>
+                <span class="button-help">Bat webcam va stream JPEG lien tuc 10 FPS.</span>
+                <span id="powerButtonState" class="button-state">OFF</span>
+              </button>
+
+              <button
+                id="recognizeButton"
+                class="device-button device-button-recognize"
+                data-state="idle"
+                type="button"
+                disabled
+              >
+                <span class="button-kicker">Task 2 / User Interaction</span>
+                <span class="button-label">Recognize</span>
+                <span class="button-help">Lan 1 ghi am, lan 2 gui len server va phat audio.</span>
+                <span id="recognizeButtonState" class="button-state">IDLE</span>
+              </button>
+
+              <p class="mini-note">
+                Simulator nay bo cac nut test tay de giong thiet bi that nhat co the.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Telemetry</h2>
           <p class="section-copy">
-            Chon mot trong hai cach: bat webcam de stream 10 FPS, hoac upload anh de
-            gui thu cong thanh frame JPEG 320x240.
+            Theo doi trang thai song song cua camera stream va nut recognize trong qua
+            trinh test end-to-end.
           </p>
 
-          <div class="button-row">
-            <button id="startCameraButton" type="button">Start Camera</button>
-            <button id="stopCameraButton" class="secondary" type="button" disabled>
-              Stop Camera
-            </button>
-            <button id="sendFrameButton" class="secondary" type="button" disabled>
-              Send Current Frame
-            </button>
-            <label class="toggle" for="autoStreamCheckbox">
-              <input id="autoStreamCheckbox" type="checkbox" disabled />
-              <span>Auto stream 10 FPS</span>
-            </label>
-          </div>
-
-          <div class="upload-row" style="margin-top: 14px;">
-            <input id="imageFileInput" type="file" accept="image/*" />
-            <button id="uploadImageButton" class="secondary" type="button" disabled>
-              Load Image
-            </button>
-          </div>
-
-          <div class="counter-chip">
-            <span>Frames sent</span>
-            <span id="frameCounter">0</span>
+          <div class="metric-row">
+            <div class="metric-chip">
+              <span>Frames sent</span>
+              <strong id="frameCounter">0</strong>
+            </div>
+            <div class="recording-indicator" id="recordingIndicator">Chua ghi am.</div>
           </div>
 
           <div class="meta-box">
             <div id="streamStatus" class="status-pill">Dang khoi tao...</div>
             <div id="frameMeta" style="margin-top: 10px;"></div>
-          </div>
-
-          <div class="preview-shell">
-            <span class="preview-badge">320 x 240 preview</span>
-            <video id="cameraPreview" autoplay muted playsinline></video>
-            <img id="imagePreview" alt="Uploaded preview" hidden />
-            <canvas id="frameCanvas" width="320" height="240" hidden></canvas>
-          </div>
-
-          <div class="hint-grid">
-            <div class="hint">
-              <strong>Step 1</strong>
-              <p>Gui it nhat 1 frame truoc khi test recognize, de server co last image.</p>
-            </div>
-            <div class="hint">
-              <strong>Step 2</strong>
-              <p>Neu can test lien tuc, bat camera va checkbox auto stream 10 FPS.</p>
-            </div>
-            <div class="hint">
-              <strong>Step 3</strong>
-              <p>Moi JPEG moi se ghi de frame cu tren server theo dung contract API.</p>
-            </div>
-          </div>
-        </article>
-
-        <article class="card">
-          <h2>2. Recognize</h2>
-          <p class="section-copy">
-            Ghi cau hoi bang microphone hoac chon file WAV. Server se tra ve audio WAV
-            sau khi chay xong pipeline recognize.
-          </p>
-
-          <div class="record-row">
-            <button id="recordButton" type="button">Start Recording</button>
-            <button id="stopRecordButton" class="secondary" type="button" disabled>
-              Stop Recording
-            </button>
-          </div>
-
-          <div class="recording-indicator" id="recordingIndicator">
-            Chua ghi am.
-          </div>
-
-          <div class="upload-row" style="margin-top: 14px;">
-            <input id="audioFileInput" type="file" accept=".wav,audio/wav,audio/x-wav" />
-            <button id="sendRecognizeButton" type="button" disabled>
-              Send Recognize
-            </button>
           </div>
 
           <div class="meta-box">
@@ -500,29 +610,19 @@
           </div>
 
           <div class="response-shell">
-            <h3>Response Audio</h3>
+            <h3>Speaker</h3>
             <p id="responseMeta" class="section-copy" style="margin-bottom: 0;">
-              Chua co response.
+              Audio response tu server se xuat hien tai day.
             </p>
             <audio id="responseAudio" controls></audio>
-            <div class="button-row" style="margin-top: 12px;">
-              <button
-                id="downloadResponseButton"
-                class="secondary"
-                type="button"
-                disabled
-              >
-                Download Response WAV
-              </button>
-            </div>
           </div>
-        </article>
+        </section>
       </section>
 
       <section class="card">
-        <h2>3. Activity Log</h2>
+        <h2>Activity Log</h2>
         <p class="section-copy">
-          Log tong hop cho camera, upload frame, recognize request, va response audio.
+          Log hanh vi cua hai task theo dung luong Power -> stream -> Recognize -> play.
         </p>
         <div id="activityLog" class="log-panel"></div>
       </section>

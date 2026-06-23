@@ -9,6 +9,11 @@ const elements = {
   serverBaseUrl: document.getElementById("serverBaseUrl"),
   videoframePath: document.getElementById("videoframePath"),
   recognizePath: document.getElementById("recognizePath"),
+  previewShell: document.getElementById("previewShell"),
+  powerButton: document.getElementById("powerButton"),
+  powerButtonState: document.getElementById("powerButtonState"),
+  recognizeButton: document.getElementById("recognizeButton"),
+  recognizeButtonState: document.getElementById("recognizeButtonState"),
   streamStatus: document.getElementById("streamStatus"),
   recognizeStatus: document.getElementById("recognizeStatus"),
   frameMeta: document.getElementById("frameMeta"),
@@ -16,33 +21,19 @@ const elements = {
   responseMeta: document.getElementById("responseMeta"),
   activityLog: document.getElementById("activityLog"),
   cameraPreview: document.getElementById("cameraPreview"),
-  imagePreview: document.getElementById("imagePreview"),
   frameCanvas: document.getElementById("frameCanvas"),
-  startCameraButton: document.getElementById("startCameraButton"),
-  stopCameraButton: document.getElementById("stopCameraButton"),
-  sendFrameButton: document.getElementById("sendFrameButton"),
-  autoStreamCheckbox: document.getElementById("autoStreamCheckbox"),
-  imageFileInput: document.getElementById("imageFileInput"),
   frameCounter: document.getElementById("frameCounter"),
-  uploadImageButton: document.getElementById("uploadImageButton"),
   recordingIndicator: document.getElementById("recordingIndicator"),
-  recordButton: document.getElementById("recordButton"),
-  stopRecordButton: document.getElementById("stopRecordButton"),
-  audioFileInput: document.getElementById("audioFileInput"),
-  sendRecognizeButton: document.getElementById("sendRecognizeButton"),
   responseAudio: document.getElementById("responseAudio"),
-  downloadResponseButton: document.getElementById("downloadResponseButton"),
 };
 
 let cameraStream = null;
 let autoStreamTimer = null;
 let frameRequestInFlight = false;
-let recognizeRequestInFlight = false;
-let lastPreparedFrameBlob = null;
-let preparedFrameSource = "";
 let streamedFrameCount = 0;
-let uploadedImageBitmap = null;
-let uploadedImagePreviewUrl = null;
+let hasStreamedFrame = false;
+let recognizeRequestInFlight = false;
+let lastStreamErrorMessage = "";
 
 let recordingStream = null;
 let recordingContext = null;
@@ -54,8 +45,6 @@ let recordingSampleRate = 44100;
 let recordingStartTime = 0;
 let recordingTicker = null;
 let isRecording = false;
-let currentRequestAudioBlob = null;
-let currentRequestAudioName = "";
 let currentResponseAudioBlob = null;
 let currentResponseAudioUrl = null;
 
@@ -64,9 +53,7 @@ elements.videoframePath.value = DEFAULT_VIDEOFRAME_PATH;
 elements.recognizePath.value = DEFAULT_RECOGNIZE_PATH;
 
 function nowLabel() {
-  return new Date().toLocaleTimeString("vi-VN", {
-    hour12: false,
-  });
+  return new Date().toLocaleTimeString("vi-VN", { hour12: false });
 }
 
 function logActivity(message, level = "info") {
@@ -86,6 +73,23 @@ function logActivity(message, level = "info") {
 function setStatus(element, message, tone = "idle") {
   element.textContent = message;
   element.dataset.tone = tone;
+}
+
+function setRecordingIndicator(message, state = "idle") {
+  elements.recordingIndicator.textContent = message;
+  elements.recordingIndicator.dataset.state = state;
+}
+
+function updateFrameMeta(message) {
+  elements.frameMeta.textContent = message;
+}
+
+function updateAudioMeta(message) {
+  elements.audioMeta.textContent = message;
+}
+
+function updateResponseMeta(message) {
+  elements.responseMeta.textContent = message;
 }
 
 function buildEndpoint(baseUrl, path) {
@@ -117,134 +121,99 @@ function formatDurationMs(durationMs) {
   return `${(durationMs / 1000).toFixed(1)}s`;
 }
 
-function showCameraPreview() {
-  elements.cameraPreview.hidden = false;
-  elements.imagePreview.hidden = true;
-}
+function syncUi() {
+  const powerOn = Boolean(cameraStream);
 
-function showImagePreview(previewUrl) {
-  elements.imagePreview.src = previewUrl;
-  elements.imagePreview.hidden = false;
-  elements.cameraPreview.hidden = true;
-}
+  elements.previewShell.dataset.online = powerOn ? "true" : "false";
+  elements.powerButton.disabled = recognizeRequestInFlight;
+  elements.powerButton.dataset.state = powerOn ? "on" : "off";
+  elements.powerButtonState.textContent = powerOn ? "STREAMING" : "OFF";
 
-function updateFrameMeta(message) {
-  elements.frameMeta.textContent = message;
-}
-
-function updateAudioMeta(message) {
-  elements.audioMeta.textContent = message;
-}
-
-function updateResponseMeta(message) {
-  elements.responseMeta.textContent = message;
-}
-
-function setFrameButtonsState() {
-  const hasCamera = Boolean(cameraStream);
-  const hasPreparedFrame = Boolean(lastPreparedFrameBlob);
-
-  elements.stopCameraButton.disabled = !hasCamera;
-  elements.autoStreamCheckbox.disabled = !hasCamera;
-  elements.sendFrameButton.disabled = !hasCamera && !uploadedImageBitmap;
-  elements.uploadImageButton.disabled = !elements.imageFileInput.files.length;
-
-  if (!hasCamera && elements.autoStreamCheckbox.checked) {
-    elements.autoStreamCheckbox.checked = false;
+  if (recognizeRequestInFlight) {
+    elements.recognizeButton.dataset.state = "busy";
+    elements.recognizeButtonState.textContent = "WAIT";
+  } else if (isRecording) {
+    elements.recognizeButton.dataset.state = "recording";
+    elements.recognizeButtonState.textContent = "SEND";
+  } else {
+    elements.recognizeButton.dataset.state = hasStreamedFrame ? "ready" : "idle";
+    elements.recognizeButtonState.textContent = hasStreamedFrame ? "READY" : "IDLE";
   }
 
-  if (!hasPreparedFrame && !hasCamera && !uploadedImageBitmap) {
-    updateFrameMeta("Chua co frame nao san sang de gui.");
-  }
+  elements.recognizeButton.disabled =
+    recognizeRequestInFlight || !powerOn || (!isRecording && !hasStreamedFrame);
 }
 
-function setRecordingButtonsState() {
-  elements.recordButton.disabled = isRecording;
-  elements.stopRecordButton.disabled = !isRecording;
-  elements.sendRecognizeButton.disabled =
-    recognizeRequestInFlight || !currentRequestAudioBlob;
-}
-
-function setRecordingIndicator(message, state = "idle") {
-  elements.recordingIndicator.textContent = message;
-  elements.recordingIndicator.dataset.state = state;
-}
-
-function resetPreparedFrame(sourceLabel = "") {
-  lastPreparedFrameBlob = null;
-  preparedFrameSource = sourceLabel;
-  setFrameButtonsState();
-}
-
-async function startCamera() {
-  if (cameraStream) {
-    return;
-  }
-
-  logActivity("Dang yeu cau truy cap camera.", "info");
-
-  const stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      width: { ideal: VIDEO_WIDTH },
-      height: { ideal: VIDEO_HEIGHT },
-    },
-    audio: false,
-  });
-
-  cameraStream = stream;
-  elements.cameraPreview.srcObject = stream;
-  await elements.cameraPreview.play();
-  preparedFrameSource = "camera";
-
-  showCameraPreview();
-  setStatus(
-    elements.streamStatus,
-    "Camera san sang. Co the gui frame hoac bat auto stream 10 FPS.",
-    "ok"
-  );
-  updateFrameMeta("Camera dang phat 320x240 preview.");
-  setFrameButtonsState();
-  logActivity("Camera da san sang.", "success");
-}
-
-function stopCamera() {
-  if (!cameraStream) {
-    return;
-  }
-
-  cameraStream.getTracks().forEach((track) => track.stop());
-  cameraStream = null;
-  elements.cameraPreview.srcObject = null;
-  stopAutoStream();
-
-  if (uploadedImagePreviewUrl) {
-    showImagePreview(uploadedImagePreviewUrl);
-  }
-
-  setStatus(elements.streamStatus, "Camera da dung.", "idle");
-  setFrameButtonsState();
-  logActivity("Camera da dung.", "info");
-}
-
-function drawBitmapToCanvas(imageSource) {
+function drawVideoToCanvas() {
   const canvas = elements.frameCanvas;
   const context = canvas.getContext("2d");
 
   canvas.width = VIDEO_WIDTH;
   canvas.height = VIDEO_HEIGHT;
-
-  context.fillStyle = "#0f172a";
+  context.fillStyle = "#08131f";
   context.fillRect(0, 0, VIDEO_WIDTH, VIDEO_HEIGHT);
 
-  const sourceWidth = imageSource.videoWidth || imageSource.width;
-  const sourceHeight = imageSource.videoHeight || imageSource.height;
+  const sourceWidth = elements.cameraPreview.videoWidth;
+  const sourceHeight = elements.cameraPreview.videoHeight;
+
+  if (!sourceWidth || !sourceHeight) {
+    throw new Error("Camera chua co frame de chup");
+  }
+
   const scale = Math.min(VIDEO_WIDTH / sourceWidth, VIDEO_HEIGHT / sourceHeight);
   const targetWidth = sourceWidth * scale;
   const targetHeight = sourceHeight * scale;
   const offsetX = (VIDEO_WIDTH - targetWidth) / 2;
   const offsetY = (VIDEO_HEIGHT - targetHeight) / 2;
 
-  context.drawImage(imageSource, offsetX, offsetY, targetWidth, targetHeight);
+  context.drawImage(
+    elements.cameraPreview,
+    offsetX,
+    offsetY,
+    targetWidth,
+    targetHeight
+  );
+}
+
+function waitForCameraFrame(timeoutMs = 1500) {
+  if (elements.cameraPreview.videoWidth && elements.cameraPreview.videoHeight) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    function cleanup() {
+      window.clearTimeout(timeoutId);
+      elements.cameraPreview.removeEventListener("loadeddata", handleReady);
+      elements.cameraPreview.removeEventListener("canplay", handleReady);
+    }
+
+    function handleReady() {
+      if (settled) {
+        return;
+      }
+
+      if (elements.cameraPreview.videoWidth && elements.cameraPreview.videoHeight) {
+        settled = true;
+        cleanup();
+        resolve();
+      }
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      reject(new Error("Camera chua xuat frame dau tien"));
+    }, timeoutMs);
+
+    elements.cameraPreview.addEventListener("loadeddata", handleReady);
+    elements.cameraPreview.addEventListener("canplay", handleReady);
+  });
 }
 
 function canvasToJpegBlob() {
@@ -252,7 +221,7 @@ function canvasToJpegBlob() {
     elements.frameCanvas.toBlob(
       (blob) => {
         if (!blob) {
-          reject(new Error("Khong tao duoc JPEG tu canvas"));
+          reject(new Error("Khong tao duoc JPEG tu camera preview"));
           return;
         }
 
@@ -264,68 +233,23 @@ function canvasToJpegBlob() {
   });
 }
 
-async function prepareFrameFromCamera() {
+async function captureFrameFromCamera() {
   if (!cameraStream) {
-    throw new Error("Camera chua duoc bat");
+    throw new Error("Power chua bat");
   }
 
-  drawBitmapToCanvas(elements.cameraPreview);
-  const frameBlob = await canvasToJpegBlob();
-
-  lastPreparedFrameBlob = frameBlob;
-  preparedFrameSource = "camera";
-  updateFrameMeta(
-    `Frame camera san sang: ${VIDEO_WIDTH}x${VIDEO_HEIGHT}, ${formatBytes(frameBlob.size)}`
-  );
-  setFrameButtonsState();
-  return frameBlob;
+  drawVideoToCanvas();
+  return canvasToJpegBlob();
 }
 
-async function prepareFrameFromUpload(file) {
-  if (!file) {
-    throw new Error("Chua chon file anh");
-  }
-
-  stopAutoStream();
-
-  if (uploadedImagePreviewUrl) {
-    URL.revokeObjectURL(uploadedImagePreviewUrl);
-  }
-
-  uploadedImagePreviewUrl = URL.createObjectURL(file);
-  showImagePreview(uploadedImagePreviewUrl);
-
-  if (uploadedImageBitmap) {
-    uploadedImageBitmap.close();
-  }
-
-  uploadedImageBitmap = await createImageBitmap(file);
-  drawBitmapToCanvas(uploadedImageBitmap);
-
-  const frameBlob = await canvasToJpegBlob();
-  lastPreparedFrameBlob = frameBlob;
-  preparedFrameSource = "upload";
-
-  updateFrameMeta(
-    `Anh upload da duoc chuan hoa thanh JPEG 320x240: ${formatBytes(frameBlob.size)}`
-  );
-  setStatus(
-    elements.streamStatus,
-    "Anh da san sang. Bam Send frame de cap nhat last image tren server.",
-    "ok"
-  );
-  setFrameButtonsState();
-  logActivity(`Da nap anh "${file.name}" de test videoframe.`, "success");
-}
-
-async function sendFrameBlob(frameBlob, sourceLabel = "unknown") {
+async function sendFrameBlob(frameBlob) {
   const endpoint = buildEndpoint(
     elements.serverBaseUrl.value,
     elements.videoframePath.value
   );
 
   frameRequestInFlight = true;
-  setStatus(elements.streamStatus, "Dang gui frame len server...", "busy");
+  setStatus(elements.streamStatus, "Dang stream frame len server...", "busy");
 
   try {
     const response = await fetch(endpoint, {
@@ -350,52 +274,27 @@ async function sendFrameBlob(frameBlob, sourceLabel = "unknown") {
     }
 
     streamedFrameCount += 1;
+    hasStreamedFrame = true;
+    lastStreamErrorMessage = "";
     elements.frameCounter.textContent = String(streamedFrameCount);
+    updateFrameMeta(
+      `Dang stream ${VIDEO_WIDTH}x${VIDEO_HEIGHT} @ 10 FPS. Frame moi nhat: ${formatBytes(frameBlob.size)}`
+    );
     setStatus(
       elements.streamStatus,
-      `Gui frame thanh cong. Last image tren server da duoc cap nhat tu ${sourceLabel}.`,
+      `Power dang mo. Last image da duoc cap nhat, tong ${streamedFrameCount} frame.`,
       "ok"
     );
-    logActivity(
-      `POST ${endpoint} thanh cong, frame ${streamedFrameCount}, payload ${formatBytes(frameBlob.size)}.`,
-      "success"
-    );
+    syncUi();
   } finally {
     frameRequestInFlight = false;
   }
 }
 
-async function captureAndSendFrame() {
-  if (frameRequestInFlight) {
-    return;
-  }
-
-  let frameBlob = lastPreparedFrameBlob;
-
-  if (preparedFrameSource === "upload" && lastPreparedFrameBlob) {
-    frameBlob = lastPreparedFrameBlob;
-  } else if (cameraStream) {
-    frameBlob = await prepareFrameFromCamera();
-  }
-
-  if (!frameBlob) {
-    throw new Error("Chua co frame nao de gui");
-  }
-
-  await sendFrameBlob(frameBlob, preparedFrameSource || "frame");
-}
-
-function startAutoStream() {
-  if (!cameraStream) {
-    throw new Error("Can bat camera truoc khi auto stream");
-  }
-
+function startAutoStreamLoop() {
   if (autoStreamTimer) {
     return;
   }
-
-  logActivity("Bat auto stream 10 FPS den /api/videoframe.", "info");
-  setStatus(elements.streamStatus, "Dang auto stream 10 FPS...", "busy");
 
   autoStreamTimer = window.setInterval(async () => {
     if (!cameraStream || frameRequestInFlight) {
@@ -403,32 +302,136 @@ function startAutoStream() {
     }
 
     try {
-      const frameBlob = await prepareFrameFromCamera();
-      await sendFrameBlob(frameBlob, "camera");
+      const frameBlob = await captureFrameFromCamera();
+      await sendFrameBlob(frameBlob);
     } catch (error) {
-      stopAutoStream();
-      setStatus(elements.streamStatus, `Auto stream loi: ${error.message}`, "error");
-      logActivity(`Auto stream loi: ${error.message}`, "error");
+      setStatus(elements.streamStatus, `Stream loi: ${error.message}`, "error");
+      if (lastStreamErrorMessage !== error.message) {
+        lastStreamErrorMessage = error.message;
+        logActivity(`Stream loi: ${error.message}`, "error");
+      }
     }
   }, AUTO_STREAM_INTERVAL_MS);
 }
 
-function stopAutoStream() {
+function stopAutoStreamLoop() {
   if (!autoStreamTimer) {
     return;
   }
 
   window.clearInterval(autoStreamTimer);
   autoStreamTimer = null;
-  logActivity("Da dung auto stream.", "info");
+}
+
+async function powerOn() {
+  if (cameraStream) {
+    return;
+  }
+
+  logActivity("Dang bat Power va xin quyen camera.", "info");
+  hasStreamedFrame = false;
+  lastStreamErrorMessage = "";
+  syncUi();
+
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: {
+      width: { ideal: VIDEO_WIDTH },
+      height: { ideal: VIDEO_HEIGHT },
+    },
+    audio: false,
+  });
+
+  cameraStream = stream;
+  elements.cameraPreview.srcObject = stream;
+  await elements.cameraPreview.play();
+  await waitForCameraFrame();
+
+  setStatus(elements.streamStatus, "Power da bat. Dang khoi dong stream 10 FPS...", "busy");
+  updateFrameMeta("Dang doi frame dau tien tu webcam.");
+  syncUi();
+
+  startAutoStreamLoop();
+  await sendFrameBlob(await captureFrameFromCamera());
+  logActivity("Power ON. ESP simulator dang stream lien tuc 10 FPS.", "success");
+}
+
+async function cleanupRecordingGraph() {
+  if (recordingTicker) {
+    window.clearInterval(recordingTicker);
+    recordingTicker = null;
+  }
+
+  recordingProcessorNode?.disconnect();
+  recordingSourceNode?.disconnect();
+  recordingSilenceNode?.disconnect();
+
+  recordingStream?.getTracks().forEach((track) => track.stop());
+  recordingStream = null;
+
+  if (recordingContext) {
+    await recordingContext.close();
+  }
+
+  recordingContext = null;
+  recordingSourceNode = null;
+  recordingProcessorNode = null;
+  recordingSilenceNode = null;
+}
+
+async function cancelRecording(reason) {
+  if (!isRecording) {
+    return;
+  }
+
+  isRecording = false;
+  recordingBuffers = [];
+  await cleanupRecordingGraph();
+  setRecordingIndicator("Chua ghi am.", "idle");
+  updateAudioMeta(reason);
+  setStatus(elements.recognizeStatus, reason, "idle");
+  syncUi();
+  logActivity(reason, "info");
+}
+
+async function powerOff() {
+  if (!cameraStream) {
+    return;
+  }
+
+  if (isRecording) {
+    await cancelRecording("Power da tat nen phien ghi am hien tai da bi huy.");
+  }
+
+  stopAutoStreamLoop();
+  cameraStream.getTracks().forEach((track) => track.stop());
+  cameraStream = null;
+  elements.cameraPreview.srcObject = null;
+  hasStreamedFrame = false;
+  lastStreamErrorMessage = "";
+  elements.responseAudio.pause();
+  elements.responseAudio.currentTime = 0;
+
+  if (!recognizeRequestInFlight) {
+    setStatus(elements.recognizeStatus, "Power dang tat. Bam Power de stream lai.", "idle");
+  }
+
+  setStatus(elements.streamStatus, "Power da tat. Webcam va stream da dung.", "idle");
+  updateFrameMeta("Khong co frame nao duoc gui khi Power OFF.");
+  syncUi();
+  logActivity("Power OFF. Da dung stream camera.", "info");
+}
+
+async function togglePower() {
+  if (recognizeRequestInFlight) {
+    throw new Error("Dang doi audio response, vui long cho xong");
+  }
 
   if (cameraStream) {
-    setStatus(
-      elements.streamStatus,
-      "Auto stream da dung. Camera van san sang.",
-      "idle"
-    );
+    await powerOff();
+    return;
   }
+
+  await powerOn();
 }
 
 function mergeFloat32Buffers(buffers) {
@@ -483,10 +486,11 @@ async function startRecording() {
     return;
   }
 
-  logActivity("Dang yeu cau microphone de ghi WAV.", "info");
-  currentRequestAudioBlob = null;
-  currentRequestAudioName = "";
-  recordingStream = await navigator.mediaDevices.getUserMedia({
+  logActivity("Nhan nut Recognize lan 1. Dang bat microphone.", "info");
+  elements.responseAudio.pause();
+  elements.responseAudio.currentTime = 0;
+
+  const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
       channelCount: 1,
       echoCancellation: true,
@@ -497,9 +501,11 @@ async function startRecording() {
 
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) {
+    stream.getTracks().forEach((track) => track.stop());
     throw new Error("Trinh duyet khong ho tro Web Audio");
   }
 
+  recordingStream = stream;
   recordingContext = new AudioContextClass();
   await recordingContext.resume();
   recordingSampleRate = recordingContext.sampleRate;
@@ -524,112 +530,65 @@ async function startRecording() {
 
   isRecording = true;
   recordingStartTime = Date.now();
-  setRecordingIndicator("Dang ghi am...", "recording");
+  setRecordingIndicator("Dang ghi cau hoi...", "recording");
+  updateAudioMeta("Nut Recognize dang ghi am. Bam lai mot lan nua de gui.");
   setStatus(
     elements.recognizeStatus,
-    "Dang ghi cau hoi. Bam Stop recording khi xong.",
+    "Dang ghi cau hoi. Nut Recognize se gui audio khi bam lan tiep theo.",
     "busy"
   );
-  setRecordingButtonsState();
+  syncUi();
 
   recordingTicker = window.setInterval(() => {
-    const durationMs = Date.now() - recordingStartTime;
-    updateAudioMeta(`Dang ghi: ${formatDurationMs(durationMs)}`);
+    updateAudioMeta(`Dang ghi: ${formatDurationMs(Date.now() - recordingStartTime)}`);
   }, 200);
 
-  logActivity("Da bat ghi am microphone.", "success");
+  logActivity("Microphone da bat, dang ghi cau hoi.", "success");
 }
 
-async function stopRecording() {
+async function stopRecordingAndBuildWav() {
   if (!isRecording) {
-    return;
+    throw new Error("Chua co phien ghi am nao");
   }
 
   isRecording = false;
-
-  if (recordingTicker) {
-    window.clearInterval(recordingTicker);
-    recordingTicker = null;
-  }
-
-  recordingProcessorNode?.disconnect();
-  recordingSourceNode?.disconnect();
-  recordingSilenceNode?.disconnect();
-
-  recordingStream?.getTracks().forEach((track) => track.stop());
-  recordingStream = null;
-
-  await recordingContext?.close();
-
-  const mergedSamples = mergeFloat32Buffers(recordingBuffers);
-  if (!mergedSamples.length) {
-    throw new Error("Khong thu duoc du lieu audio. Thu ghi am lai giup anh.");
-  }
-
-  const wavBlob = encodeWav(mergedSamples, recordingSampleRate);
   const durationMs = Date.now() - recordingStartTime;
-
-  recordingContext = null;
-  recordingSourceNode = null;
-  recordingProcessorNode = null;
-  recordingSilenceNode = null;
+  const capturedBuffers = recordingBuffers;
+  const capturedSampleRate = recordingSampleRate;
   recordingBuffers = [];
 
-  currentRequestAudioBlob = wavBlob;
-  currentRequestAudioName = `recorded-${Date.now()}.wav`;
+  await cleanupRecordingGraph();
 
+  const mergedSamples = mergeFloat32Buffers(capturedBuffers);
+  if (!mergedSamples.length) {
+    throw new Error("Khong thu duoc du lieu audio. Thu lai giup anh.");
+  }
+
+  const wavBlob = encodeWav(mergedSamples, capturedSampleRate);
   setRecordingIndicator("Da ghi xong.", "ready");
   updateAudioMeta(
-    `WAV san sang: ${formatBytes(wavBlob.size)}, ${formatDurationMs(durationMs)}`
+    `Da khoa audio WAV: ${formatBytes(wavBlob.size)}, thoi luong ${formatDurationMs(durationMs)}`
   );
-  setStatus(
-    elements.recognizeStatus,
-    "Audio da san sang. Co the gui len /api/recognize.",
-    "ok"
-  );
-  setRecordingButtonsState();
-  logActivity("Da tao file WAV tu microphone.", "success");
+  syncUi();
+  return {
+    wavBlob,
+    durationMs,
+  };
 }
 
-async function useUploadedAudioFile(file) {
-  if (!file) {
-    return;
-  }
-
-  if (
-    file.type !== "audio/wav" &&
-    file.type !== "audio/x-wav" &&
-    !file.name.toLowerCase().endsWith(".wav")
-  ) {
-    throw new Error("Chi chap nhan file WAV de test /api/recognize");
-  }
-
-  currentRequestAudioBlob = file;
-  currentRequestAudioName = file.name;
-  setRecordingIndicator("Da nap file WAV.", "ready");
-  updateAudioMeta(`Da chon WAV: ${file.name} (${formatBytes(file.size)})`);
-  setStatus(
-    elements.recognizeStatus,
-    "Audio upload da san sang. Co the gui len /api/recognize.",
-    "ok"
-  );
-  setRecordingButtonsState();
-  logActivity(`Da nap file WAV "${file.name}".`, "success");
-}
-
-async function sendRecognizeRequest() {
-  if (!currentRequestAudioBlob) {
-    throw new Error("Chua co audio WAV de gui");
-  }
-
+async function sendRecognizeRequest(audioBlob, durationMs) {
   const endpoint = buildEndpoint(
     elements.serverBaseUrl.value,
     elements.recognizePath.value
   );
 
   recognizeRequestInFlight = true;
-  setRecordingButtonsState();
-  setStatus(elements.recognizeStatus, "Dang gui audio len server...", "busy");
+  syncUi();
+  setStatus(
+    elements.recognizeStatus,
+    `Dang gui ${formatDurationMs(durationMs)} audio len server...`,
+    "busy"
+  );
 
   try {
     const response = await fetch(endpoint, {
@@ -637,7 +596,7 @@ async function sendRecognizeRequest() {
       headers: {
         "Content-Type": "audio/wav",
       },
-      body: currentRequestAudioBlob,
+      body: audioBlob,
     });
 
     const contentType = response.headers.get("content-type") || "";
@@ -662,138 +621,93 @@ async function sendRecognizeRequest() {
     currentResponseAudioUrl = URL.createObjectURL(currentResponseAudioBlob);
     elements.responseAudio.src = currentResponseAudioUrl;
     elements.responseAudio.load();
-    elements.downloadResponseButton.disabled = false;
 
     updateResponseMeta(
-      `Audio tra ve: ${formatBytes(currentResponseAudioBlob.size)} tu "${currentRequestAudioName}"`
+      `Server tra ve ${formatBytes(currentResponseAudioBlob.size)} audio WAV. Dang thu phat ngay.`
     );
     setStatus(
       elements.recognizeStatus,
-      "Nhan audio response thanh cong. Co the bam Play de nghe.",
+      "Nhan response thanh cong. Dang phat loa neu trinh duyet cho phep.",
       "ok"
     );
     logActivity(
       `POST ${endpoint} thanh cong, response ${formatBytes(currentResponseAudioBlob.size)}.`,
       "success"
     );
+
+    try {
+      await elements.responseAudio.play();
+    } catch (error) {
+      logActivity(
+        `Trinh duyet chan auto play (${error.message}). Bam Play de nghe thu cong.`,
+        "info"
+      );
+    }
   } finally {
     recognizeRequestInFlight = false;
-    setRecordingButtonsState();
+    syncUi();
   }
 }
 
-elements.startCameraButton.addEventListener("click", async () => {
-  try {
-    await startCamera();
-  } catch (error) {
-    setStatus(elements.streamStatus, `Khong mo duoc camera: ${error.message}`, "error");
-    logActivity(`Khong mo duoc camera: ${error.message}`, "error");
+async function handleRecognizeButtonPress() {
+  if (!cameraStream) {
+    throw new Error("Can bat Power truoc khi dung Recognize");
   }
-});
 
-elements.stopCameraButton.addEventListener("click", () => {
-  stopCamera();
-});
-
-elements.sendFrameButton.addEventListener("click", async () => {
-  try {
-    await captureAndSendFrame();
-  } catch (error) {
-    setStatus(elements.streamStatus, `Gui frame that bai: ${error.message}`, "error");
-    logActivity(`Gui frame that bai: ${error.message}`, "error");
-  }
-});
-
-elements.autoStreamCheckbox.addEventListener("change", () => {
-  try {
-    if (elements.autoStreamCheckbox.checked) {
-      startAutoStream();
-    } else {
-      stopAutoStream();
-    }
-  } catch (error) {
-    elements.autoStreamCheckbox.checked = false;
-    setStatus(elements.streamStatus, `Khong bat duoc auto stream: ${error.message}`, "error");
-    logActivity(`Khong bat duoc auto stream: ${error.message}`, "error");
-  }
-});
-
-elements.imageFileInput.addEventListener("change", () => {
-  setFrameButtonsState();
-});
-
-elements.uploadImageButton.addEventListener("click", async () => {
-  try {
-    const [file] = elements.imageFileInput.files;
-    await prepareFrameFromUpload(file);
-  } catch (error) {
-    setStatus(elements.streamStatus, `Khong xu ly duoc anh: ${error.message}`, "error");
-    logActivity(`Khong xu ly duoc anh: ${error.message}`, "error");
-    resetPreparedFrame("upload");
-  }
-});
-
-elements.recordButton.addEventListener("click", async () => {
-  try {
-    await startRecording();
-  } catch (error) {
-    setStatus(elements.recognizeStatus, `Khong ghi am duoc: ${error.message}`, "error");
-    logActivity(`Khong ghi am duoc: ${error.message}`, "error");
-  }
-});
-
-elements.stopRecordButton.addEventListener("click", async () => {
-  try {
-    await stopRecording();
-  } catch (error) {
-    setStatus(elements.recognizeStatus, `Khong dung ghi am duoc: ${error.message}`, "error");
-    logActivity(`Khong dung ghi am duoc: ${error.message}`, "error");
-  }
-});
-
-elements.audioFileInput.addEventListener("change", async () => {
-  try {
-    const [file] = elements.audioFileInput.files;
-    await useUploadedAudioFile(file);
-  } catch (error) {
-    setStatus(elements.recognizeStatus, `Khong nap duoc WAV: ${error.message}`, "error");
-    logActivity(`Khong nap duoc WAV: ${error.message}`, "error");
-  }
-});
-
-elements.sendRecognizeButton.addEventListener("click", async () => {
-  try {
-    await sendRecognizeRequest();
-  } catch (error) {
-    setStatus(elements.recognizeStatus, `Recognize that bai: ${error.message}`, "error");
-    logActivity(`Recognize that bai: ${error.message}`, "error");
-  }
-});
-
-elements.downloadResponseButton.addEventListener("click", () => {
-  if (!currentResponseAudioBlob) {
+  if (recognizeRequestInFlight) {
     return;
   }
 
-  const downloadUrl = currentResponseAudioUrl || URL.createObjectURL(currentResponseAudioBlob);
-  const anchor = document.createElement("a");
-  anchor.href = downloadUrl;
-  anchor.download = `recognize-response-${Date.now()}.wav`;
-  anchor.click();
-  logActivity("Da tai audio response xuong may.", "info");
+  if (!hasStreamedFrame && !isRecording) {
+    throw new Error("Can doi server nhan frame dau tien truoc");
+  }
+
+  if (!isRecording) {
+    await startRecording();
+    return;
+  }
+
+  logActivity("Nhan nut Recognize lan 2. Dang khoa audio va gui len server.", "info");
+  const { wavBlob, durationMs } = await stopRecordingAndBuildWav();
+  await sendRecognizeRequest(wavBlob, durationMs);
+}
+
+elements.powerButton.addEventListener("click", async () => {
+  try {
+    await togglePower();
+  } catch (error) {
+    setStatus(elements.streamStatus, `Power loi: ${error.message}`, "error");
+    logActivity(`Power loi: ${error.message}`, "error");
+  }
+});
+
+elements.recognizeButton.addEventListener("click", async () => {
+  try {
+    await handleRecognizeButtonPress();
+  } catch (error) {
+    setStatus(elements.recognizeStatus, `Recognize loi: ${error.message}`, "error");
+    logActivity(`Recognize loi: ${error.message}`, "error");
+    syncUi();
+  }
 });
 
 window.addEventListener("beforeunload", () => {
-  stopAutoStream();
-  stopCamera();
+  stopAutoStreamLoop();
 
-  if (uploadedImageBitmap) {
-    uploadedImageBitmap.close();
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((track) => track.stop());
+    cameraStream = null;
   }
 
-  if (uploadedImagePreviewUrl) {
-    URL.revokeObjectURL(uploadedImagePreviewUrl);
+  if (recordingTicker) {
+    window.clearInterval(recordingTicker);
   }
+
+  recordingProcessorNode?.disconnect();
+  recordingSourceNode?.disconnect();
+  recordingSilenceNode?.disconnect();
+  recordingStream?.getTracks().forEach((track) => track.stop());
+  recordingContext?.close();
 
   if (currentResponseAudioUrl) {
     URL.revokeObjectURL(currentResponseAudioUrl);
@@ -802,18 +716,18 @@ window.addEventListener("beforeunload", () => {
 
 setStatus(
   elements.streamStatus,
-  "Chua ket noi camera. Co the upload anh hoac bat webcam de gui last image.",
+  "Power OFF. Bam nut Power de bat task stream 10 FPS.",
   "idle"
 );
 setStatus(
   elements.recognizeStatus,
-  "Chua co audio. Ghi am hoac chon file WAV roi gui len server.",
+  "Recognize se san sang sau khi server nhan duoc frame dau tien.",
   "idle"
 );
 setRecordingIndicator("Chua ghi am.", "idle");
-updateFrameMeta("Server se luu moi JPEG moi nhat thanh last image.");
-updateAudioMeta("API recognize chi nhan audio/wav.");
-updateResponseMeta("Audio response se xuat hien tai day sau khi recognize thanh cong.");
-setFrameButtonsState();
-setRecordingButtonsState();
-logActivity("ESP simulator da san sang de test videoframe va recognize.", "success");
+updateFrameMeta("ESP simulator se stream webcam thanh JPEG 320x240 len /api/videoframe.");
+updateAudioMeta("Recognize: bam lan 1 de ghi, bam lan 2 de gui audio WAV.");
+updateResponseMeta("Audio response tu server se phat ngay tai day.");
+elements.frameCounter.textContent = "0";
+syncUi();
+logActivity("ESP simulator da san sang. Hai task se chay dung nhu thiet bi that.", "success");
