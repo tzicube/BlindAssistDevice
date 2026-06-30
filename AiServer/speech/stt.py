@@ -1,6 +1,6 @@
 from pathlib import Path
 from faster_whisper import WhisperModel
-from .config import WhisperSTTConfig, SUPPORTED_AUDIO_FORMATS
+from AiConfig import WhisperSTTConfig, SUPPORTED_AUDIO_FORMATS
 
 
 class WhisperSTT:

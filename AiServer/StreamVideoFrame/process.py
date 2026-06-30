@@ -1,6 +1,12 @@
 import logging
 
-from imageProcess.last_image_store import get_last_image_path, store_last_image_bytes
+try:
+    from AiServer.imageProcess.last_image_store import (
+        get_last_image_path,
+        store_last_image_bytes,
+    )
+except ModuleNotFoundError:
+    from imageProcess.last_image_store import get_last_image_path, store_last_image_bytes
 
 
 logger = logging.getLogger("blind_assist.stream_video_frame")
@@ -17,13 +23,6 @@ def process_video_frame_request(
     content_type: str | None = None,
 ) -> dict[str, bool]:
     normalized_content_type = _normalize_content_type(content_type)
-    payload_size = len(image_bytes)
-
-    logger.info(
-        "Video frame request started | content_type=%s | payload_size=%s bytes",
-        normalized_content_type or "missing",
-        payload_size,
-    )
 
     if normalized_content_type not in ALLOWED_CONTENT_TYPES:
         logger.error("Unsupported video frame content type: %s", normalized_content_type)
@@ -35,7 +34,7 @@ def process_video_frame_request(
 
     last_image_path = store_last_image_bytes(image_bytes)
 
-    logger.info(
+    logger.debug(
         "Video frame request completed successfully | last_image=%s",
         last_image_path,
     )

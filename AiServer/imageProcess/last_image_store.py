@@ -38,7 +38,7 @@ def store_last_image_bytes(image_bytes: bytes) -> Path:
     with _last_image_lock:
         _last_image_bytes = image_bytes
 
-        logger.info(
+        logger.debug(
             "Updating in-memory last image store | path=%s | payload_size=%s bytes",
             LAST_IMAGE_PATH,
             len(image_bytes),

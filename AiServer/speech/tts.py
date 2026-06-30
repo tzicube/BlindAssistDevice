@@ -2,7 +2,7 @@ from pathlib import Path
 import subprocess
 import uuid
 
-from .config import PiperTTSConfig, SUPPORTED_AUDIO_FORMATS
+from AiConfig import PiperTTSConfig, SUPPORTED_AUDIO_FORMATS
 class PiperTTS:
     def __init__(self, config: PiperTTSConfig = PiperTTSConfig()):
         self.config = config

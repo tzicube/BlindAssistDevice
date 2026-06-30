@@ -14,6 +14,7 @@ PORT = 8765
 VIDEOFRAME_PATHS = {"/api/videoframe", "/videoframe"}
 RECOGNIZE_PATHS = {"/api/recognize", "/recognize"}
 IMAGE_PATHS = {"/api/image", "/image"}
+QUIET_REQUEST_PATHS = VIDEOFRAME_PATHS | IMAGE_PATHS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +34,8 @@ class BlindAssistHandler(BaseHTTPRequestHandler):
         super().end_headers()
 
     def log_message(self, format, *args):
+        if self.path in QUIET_REQUEST_PATHS:
+            return
         logger.info("%s - %s", self.address_string(), format % args)
 
     def do_OPTIONS(self):
@@ -40,7 +43,8 @@ class BlindAssistHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        logger.info("Incoming GET request | path=%s", self.path)
+        if self.path not in QUIET_REQUEST_PATHS:
+            logger.info("Incoming GET request | path=%s", self.path)
 
         if self.path in IMAGE_PATHS:
             self.handle_image()
@@ -50,7 +54,8 @@ class BlindAssistHandler(BaseHTTPRequestHandler):
         self.send_json_error(HTTPStatus.NOT_FOUND, "Route not found")
 
     def do_POST(self):
-        logger.info("Incoming POST request | path=%s", self.path)
+        if self.path not in QUIET_REQUEST_PATHS:
+            logger.info("Incoming POST request | path=%s", self.path)
 
         if self.path in VIDEOFRAME_PATHS:
             self.handle_videoframe()
@@ -67,12 +72,6 @@ class BlindAssistHandler(BaseHTTPRequestHandler):
         try:
             request_body = self.read_request_body()
             content_type = self.headers.get("Content-Type")
-
-            logger.info(
-                "Handling /api/videoframe | content_type=%s | payload_size=%s bytes",
-                content_type or "missing",
-                len(request_body),
-            )
 
             result = process_video_frame_request(request_body, content_type)
             self.send_json_response(HTTPStatus.OK, result)
@@ -105,7 +104,6 @@ class BlindAssistHandler(BaseHTTPRequestHandler):
 
     def handle_image(self):
         try:
-            logger.info("Handling /api/image")
             image_response = process_image_request()
             self.send_binary_response(
                 HTTPStatus.OK,
@@ -118,14 +116,13 @@ class BlindAssistHandler(BaseHTTPRequestHandler):
                 },
             )
         except FileNotFoundError as exc:
-            self.send_json_error(HTTPStatus.NOT_FOUND, str(exc))
+            self.send_json_error(HTTPStatus.NOT_FOUND, str(exc), log_error=False)
         except Exception as exc:
             logger.exception("Image handler failed")
             self.send_json_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
 
     def read_request_body(self) -> bytes:
         content_length = int(self.headers.get("Content-Length", 0))
-        logger.info("Reading request body | content_length=%s bytes", content_length)
         return self.rfile.read(content_length)
 
     def send_json_response(self, status: HTTPStatus, payload: dict):
@@ -153,8 +150,9 @@ class BlindAssistHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
-    def send_json_error(self, status, message):
-        logger.error("Sending error response | status=%s | message=%s", status, message)
+    def send_json_error(self, status, message, log_error: bool = True):
+        if log_error:
+            logger.error("Sending error response | status=%s | message=%s", status, message)
 
         data = json.dumps({
             "status": False,

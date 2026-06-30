@@ -10,12 +10,12 @@ def process_image_request() -> bytes:
     image_bytes = load_last_image_bytes()
 
     if image_bytes is None:
-        logger.error("No in-memory last image is available for FE streaming")
+        logger.debug("No in-memory last image is available for FE streaming yet")
         raise FileNotFoundError(
             "No last image is available yet. Call /api/videoframe first."
         )
 
-    logger.info(
+    logger.debug(
         "Serving in-memory last image to FE | payload_size=%s bytes",
         len(image_bytes),
     )

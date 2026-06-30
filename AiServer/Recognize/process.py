@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import os
 import uuid
 from pathlib import Path
 from threading import Lock
@@ -15,23 +14,101 @@ if TYPE_CHECKING:
     from speech.stt import WhisperSTT
     from speech.tts import PiperTTS
 
-from imageProcess.last_image_store import get_last_image_path, load_last_image_bytes
+try:
+    from AiServer.imageProcess.last_image_store import (
+        get_last_image_path,
+        load_last_image_bytes,
+    )
+except ModuleNotFoundError:
+    from imageProcess.last_image_store import get_last_image_path, load_last_image_bytes
 
 
 logger = logging.getLogger("blind_assist.recognize")
 
 BASE_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = BASE_DIR.parent
+ENV_PATH = REPO_ROOT / ".env"
 RUNTIME_DIR = BASE_DIR / "runtime"
 INPUT_AUDIO_DIR = RUNTIME_DIR / "recognize_input"
 OUTPUT_AUDIO_DIR = RUNTIME_DIR / "recognize_output"
 
-MODEL_NAME = os.getenv("VISION_MODEL_NAME", "gemma3:4b")
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
 ALLOWED_CONTENT_TYPES = {"audio/wav", "audio/x-wav", "audio/wave"}
 
 _stt_instance: WhisperSTT | None = None
 _tts_instance: PiperTTS | None = None
 _service_lock = Lock()
+
+
+def _parse_dotenv(env_path: Path) -> dict[str, str]:
+    if not env_path.exists():
+        logger.warning(".env file not found at %s", env_path)
+        return {}
+
+    env_values: dict[str, str] = {}
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip("\"'")
+
+        if key:
+            env_values[key] = value
+
+    return env_values
+
+
+def _get_config_value(
+    env_values: dict[str, str],
+    *keys: str,
+) -> str | None:
+    for key in keys:
+        value = env_values.get(key)
+        if value:
+            return value
+
+    return None
+
+
+def _get_required_config_value(
+    env_values: dict[str, str],
+    *keys: str,
+) -> str:
+    value = _get_config_value(env_values, *keys)
+
+    if value:
+        return value
+
+    expected_keys = ", ".join(keys)
+    raise RuntimeError(
+        f"Missing required config in {ENV_PATH}: {expected_keys}"
+    )
+
+
+def _build_ollama_generate_url(raw_value: str) -> str:
+    cleaned_value = raw_value.strip().rstrip("/")
+
+    if cleaned_value.endswith("/api/generate"):
+        return cleaned_value
+
+    return f"{cleaned_value}/api/generate"
+
+
+_ENV_VALUES = _parse_dotenv(ENV_PATH)
+MODEL_NAME = _get_required_config_value(
+    _ENV_VALUES,
+    "OLLAMA_image_processing_MODEL",
+)
+OLLAMA_URL = _build_ollama_generate_url(
+    _get_required_config_value(
+        _ENV_VALUES,
+        "OLLAMA_BASE_URL",
+    )
+)
 
 
 def _normalize_content_type(content_type: str | None) -> str:
@@ -109,9 +186,8 @@ def _ask_multimodal_model(question: str, image_bytes: bytes, image_path: Path) -
     )
 
     logger.info(
-        "Sending multimodal request to Ollama | model=%s | url=%s",
+        "Sending multimodal request to Ollama | model=%s",
         MODEL_NAME,
-        OLLAMA_URL,
     )
 
     try:
