@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ESP Simulator</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg-1: #f6efe2;
+        --bg-2: #dfd4c1;
+        --panel: rgba(255, 250, 240, 0.9);
+        --panel-strong: #fffdf8;
+        --line: rgba(104, 74, 28, 0.15);
+        --text: #1f2937;
+        --muted: #5f6b7a;
+        --accent: #bc4c12;
+        --accent-deep: #8d2f00;
+        --ok: #0f766e;
+        --ok-soft: rgba(15, 118, 110, 0.14);
+        --warn: #b45309;
+        --warn-soft: rgba(180, 83, 9, 0.14);
+        --error: #be123c;
+        --error-soft: rgba(190, 18, 60, 0.14);
+        --device: #24211d;
+        --device-edge: #3f352a;
+        --shadow: 0 24px 70px rgba(54, 37, 15, 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Bahnschrift", "Trebuchet MS", sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(circle at top left, rgba(250, 204, 153, 0.55), transparent 32%),
+          radial-gradient(circle at top right, rgba(74, 222, 128, 0.18), transparent 26%),
+          linear-gradient(135deg, var(--bg-1), var(--bg-2));
+      }
+
+      .shell {
+        width: min(1240px, calc(100vw - 32px));
+        margin: 24px auto 32px;
+        display: grid;
+        gap: 18px;
+      }
+
+      .hero,
+      .card,
+      .device {
+        border: 1px solid var(--line);
+        box-shadow: var(--shadow);
+      }
+
+      .hero {
+        padding: 28px;
+        border-radius: 28px;
+        background: linear-gradient(135deg, rgba(255, 248, 237, 0.96), rgba(255, 255, 255, 0.92));
+      }
+
+      .hero h1 {
+        margin: 0 0 10px;
+        font-size: clamp(2rem, 3vw, 3rem);
+        line-height: 1;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .hero p {
+        margin: 0;
+        max-width: 860px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .config-grid,
+      .content-grid,
+      .device-grid,
+      .telemetry-grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .config-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .content-grid {
+        grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+      }
+
+      .device-grid {
+        grid-template-columns: minmax(0, 1.05fr) minmax(260px, 0.95fr);
+        align-items: stretch;
+      }
+
+      .telemetry-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .card {
+        padding: 20px;
+        border-radius: 24px;
+        background: var(--panel);
+        backdrop-filter: blur(8px);
+      }
+
+      .card h2,
+      .card h3,
+      .device-copy h2 {
+        margin: 0 0 8px;
+      }
+
+      .section-copy {
+        margin: 0 0 16px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        color: var(--muted);
+        text-transform: uppercase;
+      }
+
+      input[type="text"] {
+        width: 100%;
+        padding: 13px 14px;
+        border-radius: 14px;
+        border: 1px solid rgba(122, 88, 39, 0.22);
+        background: var(--panel-strong);
+        font: inherit;
+        color: var(--text);
+      }
+
+      .device {
+        padding: 22px;
+        border-radius: 32px;
+        background:
+          radial-gradient(circle at top, rgba(255, 255, 255, 0.08), transparent 24%),
+          linear-gradient(160deg, var(--device) 0%, #161412 100%);
+        color: #f8fafc;
+      }
+
+      .device-copy p {
+        margin: 0;
+        color: rgba(248, 250, 252, 0.72);
+        line-height: 1.55;
+      }
+
+      .device-copy .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .preview-shell {
+        position: relative;
+        min-height: 100%;
+        overflow: hidden;
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: linear-gradient(180deg, #08131f, #0f172a);
+        aspect-ratio: 4 / 3;
+      }
+
+      video {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+      }
+
+      .preview-badge {
+        position: absolute;
+        top: 14px;
+        left: 14px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(248, 250, 252, 0.88);
+        color: #111827;
+        font-size: 0.84rem;
+      }
+
+      .preview-badge::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: #ef4444;
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.42);
+        animation: pulse 1.2s infinite;
+      }
+
+      .preview-offline {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        text-align: center;
+        color: rgba(248, 250, 252, 0.72);
+        background:
+          linear-gradient(180deg, rgba(2, 6, 23, 0.18), rgba(2, 6, 23, 0.78)),
+          repeating-linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.02) 0,
+            rgba(255, 255, 255, 0.02) 2px,
+            transparent 2px,
+            transparent 7px
+          );
+      }
+
+      .preview-shell[data-online="true"] .preview-offline {
+        display: none;
+      }
+
+      .button-column {
+        display: grid;
+        gap: 14px;
+        align-content: start;
+      }
+
+      .device-button {
+        position: relative;
+        overflow: hidden;
+        display: grid;
+        gap: 10px;
+        width: 100%;
+        min-height: 148px;
+        padding: 20px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 24px;
+        background: linear-gradient(160deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        transition: transform 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+      }
+
+      .device-button:hover:not(:disabled) {
+        transform: translateY(-1px);
+      }
+
+      .device-button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .device-button::after {
+        content: "";
+        position: absolute;
+        inset: auto -32px -32px auto;
+        width: 120px;
+        height: 120px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      .device-button-power[data-state="on"] {
+        box-shadow: 0 16px 40px rgba(16, 185, 129, 0.18);
+      }
+
+      .device-button-recognize[data-state="recording"] {
+        box-shadow: 0 16px 40px rgba(239, 68, 68, 0.18);
+      }
+
+      .device-button-recognize[data-state="busy"] {
+        box-shadow: 0 16px 40px rgba(245, 158, 11, 0.18);
+      }
+
+      .button-kicker {
+        font-size: 0.8rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(248, 250, 252, 0.66);
+      }
+
+      .button-label {
+        font-size: 1.8rem;
+        font-weight: 700;
+        letter-spacing: 0.03em;
+      }
+
+      .button-help {
+        max-width: 20ch;
+        color: rgba(248, 250, 252, 0.74);
+        line-height: 1.45;
+      }
+
+      .button-state {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: fit-content;
+        padding: 7px 11px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.12);
+        font-size: 0.82rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .device-button-power[data-state="on"] .button-state {
+        background: rgba(16, 185, 129, 0.18);
+        color: #a7f3d0;
+      }
+
+      .device-button-recognize[data-state="recording"] .button-state {
+        background: rgba(239, 68, 68, 0.18);
+        color: #fecdd3;
+      }
+
+      .device-button-recognize[data-state="busy"] .button-state {
+        background: rgba(245, 158, 11, 0.18);
+        color: #fde68a;
+      }
+
+      .metric-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .metric-chip,
+      .recording-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(122, 88, 39, 0.12);
+      }
+
+      .metric-chip {
+        background: rgba(255, 255, 255, 0.8);
+      }
+
+      .metric-chip strong {
+        color: var(--accent);
+      }
+
+      .meta-box,
+      .response-shell {
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(122, 88, 39, 0.12);
+      }
+
+      .meta-box + .meta-box,
+      .response-shell,
+      .log-panel {
+        margin-top: 14px;
+      }
+
+      .status-pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 42px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(122, 88, 39, 0.16);
+        color: var(--text);
+      }
+
+      .status-pill[data-tone="busy"] {
+        background: var(--warn-soft);
+        color: var(--warn);
+      }
+
+      .status-pill[data-tone="ok"] {
+        background: var(--ok-soft);
+        color: var(--ok);
+      }
+
+      .status-pill[data-tone="error"] {
+        background: var(--error-soft);
+        color: var(--error);
+      }
+
+      .recording-indicator {
+        background: rgba(255, 255, 255, 0.82);
+      }
+
+      .recording-indicator::before {
+        content: "";
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: #94a3b8;
+      }
+
+      .recording-indicator[data-state="recording"]::before {
+        background: #ef4444;
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.42);
+        animation: pulse 1.2s infinite;
+      }
+
+      .recording-indicator[data-state="ready"]::before {
+        background: #10b981;
+      }
+
+      audio {
+        width: 100%;
+        margin-top: 10px;
+      }
+
+      .log-panel {
+        min-height: 220px;
+        max-height: 320px;
+        overflow: auto;
+        padding: 14px;
+        border-radius: 18px;
+        background: #161a22;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-family: "Consolas", "IBM Plex Mono", monospace;
+        color: #ecfdf5;
+      }
+
+      .log-line + .log-line {
+        margin-top: 8px;
+      }
+
+      .log-success {
+        color: #86efac;
+      }
+
+      .log-error {
+        color: #fda4af;
+      }
+
+      .log-info {
+        color: #bfdbfe;
+      }
+
+      .mini-note {
+        margin: 0;
+        color: var(--muted);
+        line-height: 1.5;
+      }
+
+      canvas {
+        display: none;
+      }
+
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.42);
+        }
+        70% {
+          box-shadow: 0 0 0 12px rgba(239, 68, 68, 0);
+        }
+        100% {
+          box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+        }
+      }
+
+      @media (max-width: 1080px) {
+        .config-grid,
+        .content-grid,
+        .device-grid,
+        .telemetry-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 720px) {
+        .shell {
+          width: min(100vw - 20px, 100%);
+          margin: 12px auto 24px;
+        }
+
+        .hero,
+        .card,
+        .device {
+          padding: 18px;
+        }
+
+        .button-label {
+          font-size: 1.55rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <h1>ESP Simulator</h1>
+        <p>
+          Simulator nay mo phong dung hanh vi cua thiet bi ESP trong
+          <strong>SharedProtocol</strong>: <strong>Power</strong> khoi dong task stream
+          JPEG 10 FPS len <strong>POST /api/videoframe</strong>, con
+          <strong>Recognize</strong> bam lan 1 de ghi am, bam lan 2 de gui
+          <strong>POST /api/recognize</strong> va phat audio response ngay khi server tra ve.
+        </p>
+      </section>
+
+      <section class="config-grid">
+        <article class="card">
+          <label class="label" for="serverBaseUrl">Server Base URL</label>
+          <input id="serverBaseUrl" type="text" spellcheck="false" />
+        </article>
+        <article class="card">
+          <label class="label" for="videoframePath">Videoframe Path</label>
+          <input id="videoframePath" type="text" spellcheck="false" />
+        </article>
+        <article class="card">
+          <label class="label" for="recognizePath">Recognize Path</label>
+          <input id="recognizePath" type="text" spellcheck="false" />
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <section class="device">
+          <div class="device-copy">
+            <div class="eyebrow">ESP Device Startup</div>
+            <h2>Two Parallel Tasks</h2>
+            <p>
+              Task 1 lien tuc stream webcam thanh frame 320x240. Task 2 theo doi nut
+              Recognize de thu am cau hoi, gui len server va nhan audio WAV tra ve.
+            </p>
+          </div>
+
+          <div class="device-grid" style="margin-top: 18px;">
+            <div class="preview-shell" id="previewShell" data-online="false">
+              <span class="preview-badge">Camera task @ 10 FPS</span>
+              <video id="cameraPreview" autoplay muted playsinline></video>
+              <div class="preview-offline">
+                Bam nut Power de bat webcam va stream frame len server.
+              </div>
+              <canvas id="frameCanvas" width="320" height="240"></canvas>
+            </div>
+
+            <div class="button-column">
+              <button
+                id="powerButton"
+                class="device-button device-button-power"
+                data-state="off"
+                type="button"
+              >
+                <span class="button-kicker">Task 1 / Video Streaming</span>
+                <span class="button-label">Power</span>
+                <span class="button-help">Bat webcam va stream JPEG lien tuc 10 FPS.</span>
+                <span id="powerButtonState" class="button-state">OFF</span>
+              </button>
+
+              <button
+                id="recognizeButton"
+                class="device-button device-button-recognize"
+                data-state="idle"
+                type="button"
+                disabled
+              >
+                <span class="button-kicker">Task 2 / User Interaction</span>
+                <span class="button-label">Recognize</span>
+                <span class="button-help">Lan 1 ghi am, lan 2 gui len server va phat audio.</span>
+                <span id="recognizeButtonState" class="button-state">IDLE</span>
+              </button>
+
+              <p class="mini-note">
+                Simulator nay bo cac nut test tay de giong thiet bi that nhat co the.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Telemetry</h2>
+          <p class="section-copy">
+            Theo doi trang thai song song cua camera stream va nut recognize trong qua
+            trinh test end-to-end.
+          </p>
+
+          <div class="metric-row">
+            <div class="metric-chip">
+              <span>Frames sent</span>
+              <strong id="frameCounter">0</strong>
+            </div>
+            <div class="recording-indicator" id="recordingIndicator">Chua ghi am.</div>
+          </div>
+
+          <div class="meta-box">
+            <div id="streamStatus" class="status-pill">Dang khoi tao...</div>
+            <div id="frameMeta" style="margin-top: 10px;"></div>
+          </div>
+
+          <div class="meta-box">
+            <div id="recognizeStatus" class="status-pill">Dang khoi tao...</div>
+            <div id="audioMeta" style="margin-top: 10px;"></div>
+          </div>
+
+          <div class="response-shell">
+            <h3>Speaker</h3>
+            <p id="responseMeta" class="section-copy" style="margin-bottom: 0;">
+              Audio response tu server se xuat hien tai day.
+            </p>
+            <audio id="responseAudio" controls></audio>
+          </div>
+        </section>
+      </section>
+
+      <section class="card">
+        <h2>Activity Log</h2>
+        <p class="section-copy">
+          Log hanh vi cua hai task theo dung luong Power -> stream -> Recognize -> play.
+        </p>
+        <div id="activityLog" class="log-panel"></div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
