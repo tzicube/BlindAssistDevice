@@ -1,3 +1,55 @@
+
+
+import { useEffect, useState } from "react";
+
+const API_BASE = "http://localhost:8765";
+
+export default function CameraPanel({ detections }) {
+  const [imageUrl, setImageUrl] = useState(
+    `${API_BASE}/api/image?t=${Date.now()}`
+  );
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setImageUrl(`${API_BASE}/api/image?t=${Date.now()}`);
+    }, 100); // 10 FPS
+
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="bg-white rounded shadow p-4 h-full">
+      <h2 className="font-bold text-xl mb-4">
+        Live Camera / YOLO Detection
+      </h2>
+
+      <div className="bg-black h-96 rounded overflow-hidden">
+        <img
+          src={imageUrl}
+          alt="Camera"
+          className="w-full h-full object-cover"
+          draggable={false}
+        />
+      </div>
+
+      <div className="bg-red-100 border border-red-400 rounded p-3 mt-4">
+        ⚠ Obstacle detected
+      </div>
+
+      <div className="flex gap-2 mt-4 flex-wrap">
+        {detections.map((item) => (
+          <div
+            key={item.id}
+            className="bg-blue-100 px-3 py-1 rounded"
+          >
+            {item.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // import { useEffect, useState } from "react";
 
 // const frames = [
@@ -53,53 +105,3 @@
 //     </div>
 //   );
 // }
-
-import { useEffect, useState } from "react";
-
-const API_BASE = "http://localhost:8765";
-
-export default function CameraPanel({ detections }) {
-  const [imageUrl, setImageUrl] = useState(
-    `${API_BASE}/api/image?t=${Date.now()}`
-  );
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setImageUrl(`${API_BASE}/api/image?t=${Date.now()}`);
-    }, 100); // 10 FPS
-
-    return () => clearInterval(timer);
-  }, []);
-
-  return (
-    <div className="bg-white rounded shadow p-4 h-full">
-      <h2 className="font-bold text-xl mb-4">
-        Live Camera / YOLO Detection
-      </h2>
-
-      <div className="bg-black h-96 rounded overflow-hidden">
-        <img
-          src={imageUrl}
-          alt="Camera"
-          className="w-full h-full object-cover"
-          draggable={false}
-        />
-      </div>
-
-      <div className="bg-red-100 border border-red-400 rounded p-3 mt-4">
-        ⚠ Obstacle detected
-      </div>
-
-      <div className="flex gap-2 mt-4 flex-wrap">
-        {detections.map((item) => (
-          <div
-            key={item.id}
-            className="bg-blue-100 px-3 py-1 rounded"
-          >
-            {item.label}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
