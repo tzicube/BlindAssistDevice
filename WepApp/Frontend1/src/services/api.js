@@ -1,23 +1,34 @@
 const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:8000";
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:8000";
 
 async function request(path, options = {}) {
-  const response = await fetch(`${API_URL}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
-    ...options,
-  });
+  const response = await fetch(
+    `${API_URL}${path}`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers || {}),
+      },
+      ...options,
+    }
+  );
 
   if (!response.ok) {
-    throw new Error(`API Error ${response.status}`);
+    throw new Error(
+      `API Error ${response.status}`
+    );
   }
 
   return response.json();
 }
 
 export const api = {
+
+  // =========================
+  // EXISTING API
+  // =========================
+
   getDashboardStatus() {
     return request("/api/status");
   },
@@ -26,21 +37,45 @@ export const api = {
     return request("/api/objects");
   },
 
+  startNavigation(destination) {
+    return request(
+      "/api/navigation/start",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          destination,
+        }),
+      }
+    );
+  },
+
+  getCameraFrame() {
+    return request("/api/camera");
+  },
+
+  // =========================
+  // SAVED PLACES
+  // =========================
+
   getSavedPlaces() {
     return request("/api/places");
   },
 
-  startNavigation(destination) {
-    return request("/api/navigation/start", {
+  createSavedPlace(place) {
+    return request("/api/places", {
       method: "POST",
-      body: JSON.stringify({
-        destination,
-      }),
+      body: JSON.stringify(place),
     });
   },
-  getCameraFrame() {
-  return request("/api/camera");
-},
+
+  deleteSavedPlace(placeId) {
+    return request(
+      `/api/places/${placeId}`,
+      {
+        method: "DELETE",
+      }
+    );
+  },
 };
 
 export default api;
