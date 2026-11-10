@@ -12,6 +12,31 @@ application/json
 ## Workflow
 Continuously send images to the server, so the server can send the images to the web application.
 
+# POST /api/location
+
+## Request
+
+Content-Type: application/json
+
+```json
+{
+  "latitude": 24.990782,
+  "longitude": 121.346525,
+  "source": "esp-simulator"
+}
+```
+
+## Response
+
+The server returns the accepted coordinates and update time. `GET /api/status`
+includes this location for the dashboard, and `DELETE /api/location` clears it
+for a fresh test.
+
+## Workflow
+
+The ESP simulator (or ESP firmware) sends its latest GPS fix to the dashboard API
+on port `8787`. The dashboard displays the coordinates and places a marker on the map.
+
 # ===============================================================================================
 # POST /api/recognize
 

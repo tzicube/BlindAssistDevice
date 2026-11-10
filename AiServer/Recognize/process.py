@@ -3,24 +3,21 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import uuid
+import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from threading import Lock
 from typing import TYPE_CHECKING
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-if TYPE_CHECKING:
-    from speech.stt import WhisperSTT
-    from speech.tts import PiperTTS
+from AiServer.AiConfig import AssistantConfig
 
-try:
-    from AiServer.imageProcess.last_image_store import (
-        get_last_image_path,
-        load_last_image_bytes,
-    )
-except ModuleNotFoundError:
-    from imageProcess.last_image_store import get_last_image_path, load_last_image_bytes
+if TYPE_CHECKING:
+    from AiServer.speech.stt import WhisperSTT
+    from AiServer.speech.tts import PiperTTS
+
+from AiServer.imageProcess.last_image_store import load_last_image_bytes
 
 
 logger = logging.getLogger("blind_assist.recognize")
@@ -29,9 +26,6 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = BASE_DIR.parent
 ENV_PATH = REPO_ROOT / ".env"
 RUNTIME_DIR = BASE_DIR / "runtime"
-INPUT_AUDIO_DIR = RUNTIME_DIR / "recognize_input"
-OUTPUT_AUDIO_DIR = RUNTIME_DIR / "recognize_output"
-
 ALLOWED_CONTENT_TYPES = {"audio/wav", "audio/x-wav", "audio/wave"}
 
 _stt_instance: WhisperSTT | None = None
@@ -67,7 +61,7 @@ def _get_config_value(
     *keys: str,
 ) -> str | None:
     for key in keys:
-        value = env_values.get(key)
+        value = os.getenv(key) or env_values.get(key)
         if value:
             return value
 
@@ -109,6 +103,36 @@ OLLAMA_URL = _build_ollama_generate_url(
         "OLLAMA_BASE_URL",
     )
 )
+ASSISTANT_CONFIG = AssistantConfig(
+    name=_get_config_value(_ENV_VALUES, "AI_ASSISTANT_NAME") or "BlindAssist",
+    role=(
+        _get_config_value(_ENV_VALUES, "AI_ASSISTANT_ROLE")
+        or "assistive visual and situational-awareness AI"
+    ),
+    audience=(
+        _get_config_value(_ENV_VALUES, "AI_ASSISTANT_AUDIENCE")
+        or "a blind or low-vision user"
+    ),
+    task=(
+        _get_config_value(_ENV_VALUES, "AI_ASSISTANT_TASK")
+        or (
+            "analyze the latest camera image, answer the user's spoken question, "
+            "identify relevant objects or obstacles, and prioritize urgent hazards"
+        )
+    ),
+    operating_context=(
+        _get_config_value(_ENV_VALUES, "AI_OPERATION_CONTEXT")
+        or "the BlindAssist smart-glasses system with a live camera and GPS"
+    ),
+    operating_region=(
+        _get_config_value(_ENV_VALUES, "AI_OPERATION_REGION") or "Taiwan"
+    ),
+    response_language=(
+        _get_config_value(_ENV_VALUES, "AI_RESPONSE_LANGUAGE")
+        or "Traditional Chinese (zh-TW)"
+    ),
+)
+AI_RESPONSE_LANGUAGE = ASSISTANT_CONFIG.response_language
 
 
 def _normalize_content_type(content_type: str | None) -> str:
@@ -121,7 +145,7 @@ def _get_stt() -> WhisperSTT:
     if _stt_instance is None:
         with _service_lock:
             if _stt_instance is None:
-                from speech.stt import WhisperSTT
+                from AiServer.speech.stt import WhisperSTT
 
                 logger.info("Initializing Whisper STT service")
                 _stt_instance = WhisperSTT()
@@ -136,7 +160,7 @@ def _get_tts() -> PiperTTS:
     if _tts_instance is None:
         with _service_lock:
             if _tts_instance is None:
-                from speech.tts import PiperTTS
+                from AiServer.speech.tts import PiperTTS
 
                 logger.info("Initializing Piper TTS service")
                 _tts_instance = PiperTTS()
@@ -145,28 +169,71 @@ def _get_tts() -> PiperTTS:
     return _tts_instance
 
 
-def _save_audio_request(audio_bytes: bytes) -> Path:
-    INPUT_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-    audio_path = INPUT_AUDIO_DIR / f"recognize_{uuid.uuid4().hex}.wav"
-
-    logger.info("Saving incoming audio request to: %s", audio_path)
+def _save_audio_request(audio_bytes: bytes, request_dir: Path) -> Path:
+    audio_path = request_dir / "question.wav"
     audio_path.write_bytes(audio_bytes)
     return audio_path
 
 
-def _build_prompt(question: str) -> str:
+def _get_current_location_context() -> str:
+    try:
+        from Backend.places_server import database
+
+        location = database.get_latest_location()
+    except Exception:  # noqa: BLE001
+        logger.warning("Could not load current GPS context for AI prompt", exc_info=True)
+        return "Current device GPS is unavailable."
+
+    if not location:
+        return "Current device GPS is unavailable."
+
+    latitude = float(location["latitude"])
+    longitude = float(location["longitude"])
+    source = str(location.get("source") or "unknown")
+    updated_at = str(location.get("updatedAt") or "unknown")
     return (
-        "You are assisting a blind user. "
-        "Use the latest camera image to answer the user's question clearly, naturally, and briefly. "
-        "If the image does not provide enough evidence, say that honestly.\n"
-        f"User question: {question}"
+        f"Current device GPS: {latitude:.6f}, {longitude:.6f}; "
+        f"source: {source}; last update: {updated_at}."
     )
 
 
-def _ask_multimodal_model(question: str, image_bytes: bytes, image_path: Path) -> str:
+def _build_prompt(question: str) -> str:
+    config = ASSISTANT_CONFIG
+    return "\n".join(
+        [
+            "AI IDENTITY",
+            f"- Name: {config.name}",
+            f"- Role: {config.role}",
+            f"- Primary user: {config.audience}",
+            "",
+            "OPERATING CONTEXT",
+            f"- System: {config.operating_context}",
+            f"- Region: {config.operating_region}",
+            f"- {_get_current_location_context()}",
+            "- Visual source: the latest camera image attached to this request.",
+            "",
+            "RESPONSIBILITIES",
+            f"- Main task: {config.task}.",
+            "- Answer the user's current question directly and briefly.",
+            "- State urgent nearby hazards first when they are clearly visible.",
+            "",
+            "SAFETY AND RESPONSE RULES",
+            "- Use only evidence visible in the image or explicitly supplied in this prompt.",
+            "- Never invent objects, distances, street conditions, or navigation directions.",
+            "- If evidence is unclear or insufficient, say so honestly.",
+            "- Do not claim that a path is safe; remind the user to rely on their cane, "
+            "guide dog, and real-world safety signals when appropriate.",
+            f"- Respond only in {config.response_language}, using natural wording that "
+            "is easy to understand when spoken aloud.",
+            "",
+            f"USER QUESTION: {question.strip()}",
+        ]
+    )
+
+
+def _ask_multimodal_model(question: str, image_bytes: bytes) -> str:
     logger.info(
-        "Encoding last image for multimodal request | path=%s | image_size=%s bytes",
-        image_path,
+        "Encoding last image for multimodal request | image_size=%s bytes",
         len(image_bytes),
     )
     image_base64 = base64.b64encode(image_bytes).decode("utf-8")
@@ -236,47 +303,50 @@ def process_recognize_request(
         logger.error("Recognize payload is empty")
         raise ValueError("Audio payload is empty")
 
-    last_image_path = get_last_image_path()
     last_image_bytes = load_last_image_bytes()
 
     if last_image_bytes is None:
-        logger.error("Last image not found for recognize pipeline: %s", last_image_path)
+        logger.error("No last image is available for recognize pipeline")
         raise FileNotFoundError(
             "No last image is available yet. Call /api/videoframe first."
         )
 
+    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+
     try:
-        audio_path = _save_audio_request(audio_bytes)
+        with TemporaryDirectory(prefix="recognize_", dir=RUNTIME_DIR) as temp_dir:
+            request_dir = Path(temp_dir)
+            audio_path = _save_audio_request(audio_bytes, request_dir)
 
-        logger.info("Starting Speech-to-Text step")
-        question = _get_stt().transcribe(audio_path)
+            logger.info("Starting Speech-to-Text step")
+            question = _get_stt().transcribe(audio_path)
 
-        if not question:
-            logger.error("Speech-to-Text returned empty text")
-            raise RuntimeError("Speech-to-Text returned empty text")
+            if not question:
+                logger.error("Speech-to-Text returned empty text")
+                raise RuntimeError("Speech-to-Text returned empty text")
 
-        logger.info("Speech-to-Text completed | question=%s", question)
+            logger.info("Speech-to-Text completed | question=%s", question)
 
-        logger.info("Starting multimodal reasoning step")
-        answer_text = _ask_multimodal_model(
-            question,
-            last_image_bytes,
-            last_image_path,
-        )
+            logger.info("Starting multimodal reasoning step")
+            answer_text = _ask_multimodal_model(
+                question,
+                last_image_bytes,
+            )
 
-        OUTPUT_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-        output_path = OUTPUT_AUDIO_DIR / f"answer_{uuid.uuid4().hex}.wav"
+            output_path = request_dir / "answer.wav"
 
-        logger.info("Starting Text-to-Speech step | output_path=%s", output_path)
-        generated_audio_path = _get_tts().synthesize(answer_text, output_path=output_path)
-        generated_audio = generated_audio_path.read_bytes()
+            logger.info("Starting Text-to-Speech step")
+            generated_audio_path = _get_tts().synthesize(
+                answer_text,
+                output_path=output_path,
+            )
+            generated_audio = generated_audio_path.read_bytes()
 
-        logger.info(
-            "Recognize pipeline completed successfully | output_path=%s | output_size=%s bytes",
-            generated_audio_path,
-            len(generated_audio),
-        )
-        return generated_audio
+            logger.info(
+                "Recognize pipeline completed successfully | output_size=%s bytes",
+                len(generated_audio),
+            )
+            return generated_audio
     except Exception:
         logger.exception("Recognize pipeline failed")
         raise

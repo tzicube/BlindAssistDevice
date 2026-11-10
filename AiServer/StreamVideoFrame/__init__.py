@@ -1,0 +1,1 @@
+"""Camera-frame ingestion pipeline."""

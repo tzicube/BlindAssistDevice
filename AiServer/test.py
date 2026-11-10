@@ -2,6 +2,7 @@ import json
 import logging
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlsplit
 
 from Recognize.process import process_recognize_request
 from StreamVideoFrame.process import process_video_frame_request
@@ -34,7 +35,7 @@ class BlindAssistHandler(BaseHTTPRequestHandler):
         super().end_headers()
 
     def log_message(self, format, *args):
-        if self.path in QUIET_REQUEST_PATHS:
+        if urlsplit(self.path).path in QUIET_REQUEST_PATHS:
             return
         logger.info("%s - %s", self.address_string(), format % args)
 
@@ -43,29 +44,31 @@ class BlindAssistHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
-        if self.path not in QUIET_REQUEST_PATHS:
-            logger.info("Incoming GET request | path=%s", self.path)
+        request_path = urlsplit(self.path).path
+        if request_path not in QUIET_REQUEST_PATHS:
+            logger.info("Incoming GET request | path=%s", request_path)
 
-        if self.path in IMAGE_PATHS:
+        if request_path in IMAGE_PATHS:
             self.handle_image()
             return
 
-        logger.warning("Route not found: %s", self.path)
+        logger.warning("Route not found: %s", request_path)
         self.send_json_error(HTTPStatus.NOT_FOUND, "Route not found")
 
     def do_POST(self):
-        if self.path not in QUIET_REQUEST_PATHS:
-            logger.info("Incoming POST request | path=%s", self.path)
+        request_path = urlsplit(self.path).path
+        if request_path not in QUIET_REQUEST_PATHS:
+            logger.info("Incoming POST request | path=%s", request_path)
 
-        if self.path in VIDEOFRAME_PATHS:
+        if request_path in VIDEOFRAME_PATHS:
             self.handle_videoframe()
             return
 
-        if self.path in RECOGNIZE_PATHS:
+        if request_path in RECOGNIZE_PATHS:
             self.handle_recognize()
             return
 
-        logger.warning("Route not found: %s", self.path)
+        logger.warning("Route not found: %s", request_path)
         self.send_json_error(HTTPStatus.NOT_FOUND, "Route not found")
 
     def handle_videoframe(self):

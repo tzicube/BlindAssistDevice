@@ -1,12 +1,14 @@
+import os
 from pathlib import Path
 import subprocess
 import uuid
 
-from AiConfig import PiperTTSConfig, SUPPORTED_AUDIO_FORMATS
+from AiServer.AiConfig import PiperTTSConfig, SUPPORTED_AUDIO_FORMATS
+
+
 class PiperTTS:
     def __init__(self, config: PiperTTSConfig = PiperTTSConfig()):
         self.config = config
-        self.config.output_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.config.model_path.exists():
             raise FileNotFoundError(f"Piper model not found: {self.config.model_path}")
@@ -24,6 +26,9 @@ class PiperTTS:
             output_path = Path(output_path)
         
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        process_environment = os.environ.copy()
+        process_environment["PYTHONIOENCODING"] = "utf-8"
+        process_environment["PYTHONUTF8"] = "1"
 
         result = subprocess.run(
             [
@@ -35,6 +40,8 @@ class PiperTTS:
             ],
             input=text.strip(),
             text=True,
+            encoding="utf-8",
+            env=process_environment,
             capture_output=True
         )
 
