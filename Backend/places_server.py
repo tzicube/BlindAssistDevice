@@ -1,381 +1,411 @@
 import json
+import math
+from datetime import datetime
 from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
+from http.server import BaseHTTPRequestHandler
+from urllib.parse import urlsplit
+
+from .database import BackendDatabase
+from .navigation import extract_destination_query, resolve_destination
 
 
-# =========================================================
-# SERVER CONFIG
-# =========================================================
+MAX_JSON_BYTES = 64 * 1024
 
-HOST = "0.0.0.0"
-PORT = 8000
+database = BackendDatabase()
 
 
-# =========================================================
-# DATA FILE
-# =========================================================
+class ApiError(Exception):
+    def __init__(self, message: str, status: HTTPStatus = HTTPStatus.BAD_REQUEST):
+        super().__init__(message)
+        self.status = status
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-DATA_FILE = DATA_DIR / "savedPlaces.json"
-
-
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-
-
-# =========================================================
-# JSON HELPERS
-# =========================================================
-
-def load_places():
-    if not DATA_FILE.exists():
-        DATA_FILE.write_text(
-            "[]",
-            encoding="utf-8"
-        )
-        return []
-
-    try:
-        content = DATA_FILE.read_text(
-            encoding="utf-8"
-        ).strip()
-
-        if not content:
-            return []
-
-        data = json.loads(content)
-
-        if not isinstance(data, list):
-            return []
-
-        return data
-
-    except (json.JSONDecodeError, OSError):
-        return []
-
-
-def save_places(places):
-    DATA_FILE.write_text(
-        json.dumps(
-            places,
-            ensure_ascii=False,
-            indent=2
-        ),
-        encoding="utf-8"
-    )
-
-
-# =========================================================
-# HTTP HANDLER
-# =========================================================
 
 class PlacesHandler(BaseHTTPRequestHandler):
-
-    # -----------------------------------------------------
-    # CORS
-    # -----------------------------------------------------
-
     def end_headers(self):
-        self.send_header(
-            "Access-Control-Allow-Origin",
-            "*"
-        )
-
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header(
             "Access-Control-Allow-Methods",
-            "GET, POST, DELETE, OPTIONS"
+            "GET, POST, PUT, DELETE, OPTIONS",
         )
-
-        self.send_header(
-            "Access-Control-Allow-Headers",
-            "Content-Type"
-        )
-
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         super().end_headers()
 
-    # -----------------------------------------------------
-    # OPTIONS
-    # -----------------------------------------------------
-
     def do_OPTIONS(self):
-        self.send_response(
-            HTTPStatus.NO_CONTENT
-        )
-
+        self.send_response(HTTPStatus.NO_CONTENT)
         self.end_headers()
 
-    # -----------------------------------------------------
-    # GET /api/places
-    # -----------------------------------------------------
-
     def do_GET(self):
-
-        if self.path == "/api/places":
-
-            places = load_places()
-
+        path = self.request_path
+        if path == "/api/status":
+            self.handle_status()
+        elif path == "/api/telemetry":
             self.send_json(
                 HTTPStatus.OK,
-                places
+                {"status": True, "telemetry": database.get_latest_location()},
             )
-
-            return
-
-        self.send_json(
-            HTTPStatus.NOT_FOUND,
-            {
-                "status": False,
-                "message": "Route not found"
-            }
-        )
-
-    # -----------------------------------------------------
-    # POST /api/places
-    # -----------------------------------------------------
+        elif path == "/api/location":
+            self.send_json(
+                HTTPStatus.OK,
+                {"status": True, "location": database.get_latest_location()},
+            )
+        elif path == "/api/places":
+            self.send_json(HTTPStatus.OK, database.list_places())
+        else:
+            self.route_not_found()
 
     def do_POST(self):
+        path = self.request_path
+        if path == "/api/telemetry":
+            self.handle_telemetry_update()
+        elif path == "/api/location":
+            self.handle_location_update()
+        elif path == "/api/places":
+            self.handle_create_place()
+        elif path == "/api/navigation/resolve":
+            self.handle_resolve_destination()
+        else:
+            self.route_not_found()
 
-        if self.path != "/api/places":
-
-            self.send_json(
-                HTTPStatus.NOT_FOUND,
-                {
-                    "status": False,
-                    "message": "Route not found"
-                }
-            )
-
+    def do_PUT(self):
+        place_id = place_aliases_path_id(self.request_path)
+        if place_id is None:
+            self.route_not_found()
             return
-
-        try:
-
-            content_length = int(
-                self.headers.get(
-                    "Content-Length",
-                    0
-                )
-            )
-
-            body = self.rfile.read(
-                content_length
-            )
-
-            place = json.loads(
-                body.decode("utf-8")
-            )
-
-            if not isinstance(place, dict):
-
-                self.send_json(
-                    HTTPStatus.BAD_REQUEST,
-                    {
-                        "status": False,
-                        "message": "Invalid place data"
-                    }
-                )
-
-                return
-
-            # ---------------------------------------------
-            # Validate required fields
-            # ---------------------------------------------
-
-            required_fields = [
-                "id",
-                "name",
-                "lat",
-                "lng"
-            ]
-
-            for field in required_fields:
-
-                if field not in place:
-
-                    self.send_json(
-                        HTTPStatus.BAD_REQUEST,
-                        {
-                            "status": False,
-                            "message":
-                                f"Missing field: {field}"
-                        }
-                    )
-
-                    return
-
-            # ---------------------------------------------
-            # Load current places
-            # ---------------------------------------------
-
-            places = load_places()
-
-            # ---------------------------------------------
-            # Prevent duplicate ID
-            # ---------------------------------------------
-
-            places = [
-                existing
-                for existing in places
-                if existing.get("id") != place["id"]
-            ]
-
-            # ---------------------------------------------
-            # Add new place
-            # ---------------------------------------------
-
-            places.append(place)
-
-            save_places(places)
-
-            self.send_json(
-                HTTPStatus.CREATED,
-                place
-            )
-
-        except json.JSONDecodeError:
-
-            self.send_json(
-                HTTPStatus.BAD_REQUEST,
-                {
-                    "status": False,
-                    "message": "Invalid JSON"
-                }
-            )
-
-        except Exception as error:
-
-            self.send_json(
-                HTTPStatus.INTERNAL_SERVER_ERROR,
-                {
-                    "status": False,
-                    "message": str(error)
-                }
-            )
-
-    # -----------------------------------------------------
-    # DELETE /api/places/:id
-    # -----------------------------------------------------
+        self.handle_replace_place_aliases(place_id)
 
     def do_DELETE(self):
+        path = self.request_path
+        if path in {"/api/location", "/api/telemetry"}:
+            database.clear_latest_location()
+            self.send_json(
+                HTTPStatus.OK,
+                {"status": True, "message": "Telemetry cleared"},
+            )
+            return
 
         prefix = "/api/places/"
-
-        if not self.path.startswith(prefix):
-
-            self.send_json(
-                HTTPStatus.NOT_FOUND,
-                {
-                    "status": False,
-                    "message": "Route not found"
-                }
-            )
-
+        if not path.startswith(prefix):
+            self.route_not_found()
             return
 
         try:
-
-            place_id = int(
-                self.path[len(prefix):]
-            )
-
+            place_id = int(path[len(prefix):])
         except ValueError:
-
-            self.send_json(
-                HTTPStatus.BAD_REQUEST,
-                {
-                    "status": False,
-                    "message": "Invalid place ID"
-                }
-            )
-
+            self.send_error_json(HTTPStatus.BAD_REQUEST, "Invalid place ID")
             return
 
-        places = load_places()
-
-        new_places = [
-            place
-            for place in places
-            if place.get("id") != place_id
-        ]
-
-        if len(new_places) == len(places):
-
-            self.send_json(
-                HTTPStatus.NOT_FOUND,
-                {
-                    "status": False,
-                    "message": "Place not found"
-                }
-            )
-
+        if not database.delete_place(place_id):
+            self.send_error_json(HTTPStatus.NOT_FOUND, "Place not found")
             return
-
-        save_places(new_places)
 
         self.send_json(
             HTTPStatus.OK,
+            {"status": True, "message": "Place deleted"},
+        )
+
+    @property
+    def request_path(self) -> str:
+        return urlsplit(self.path).path
+
+    def handle_status(self):
+        location = database.get_latest_location()
+        gps = (
+            f"{location['latitude']:.6f}, {location['longitude']:.6f}"
+            if location
+            else "Waiting for device"
+        )
+        self.send_json(
+            HTTPStatus.OK,
             {
-                "status": True,
-                "message": "Place deleted"
-            }
+                "backendOnline": True,
+                "online": location is not None,
+                "battery": location.get("battery") if location else None,
+                "address": location.get("address", "") if location else "",
+                "heading": location.get("heading") if location else None,
+                "direction": location.get("direction") if location else None,
+                "gps": gps,
+                "location": location,
+                "signal": (
+                    f"Telemetry: {location['source']}" if location else "API connected"
+                ),
+                "time": datetime.now().astimezone().strftime("%H:%M:%S"),
+                "navigation": {
+                    "heading": location.get("heading"),
+                    "direction": location.get("direction"),
+                } if location else {},
+                "detections": [],
+                "systemStatus": (
+                    f"Telemetry received from {location['source']}"
+                    if location
+                    else "Backend reachable; waiting for device telemetry"
+                ),
+            },
         )
 
-    # =====================================================
-    # JSON RESPONSE
-    # =====================================================
+    def handle_create_place(self):
+        try:
+            payload = self.read_json_object()
+            name = str(payload.get("name") or "").strip()
+            if not name:
+                raise ApiError("Place name is required")
+            if len(name) > 100:
+                raise ApiError("Place name must be 100 characters or fewer")
+            address = str(payload.get("address") or "").strip()
+            if not address:
+                raise ApiError("Place address is required")
+            if len(address) > 500:
+                raise ApiError("Place address must be 500 characters or fewer")
 
-    def send_json(
-        self,
-        status_code,
-        data
-    ):
+            latitude = coordinate(payload, "lat", "latitude", -90, 90)
+            longitude = coordinate(payload, "lng", "longitude", -180, 180)
+            x_percent = percentage(payload.get("xPercent"), "xPercent")
+            y_percent = percentage(payload.get("yPercent"), "yPercent")
+            aliases = aliases_from_payload(payload)
 
-        response = json.dumps(
-            data,
-            ensure_ascii=False
-        ).encode("utf-8")
+            place = database.create_place(
+                name=name,
+                latitude=latitude,
+                longitude=longitude,
+                x_percent=x_percent,
+                y_percent=y_percent,
+                address=address,
+                aliases=aliases,
+            )
+            self.send_json(HTTPStatus.CREATED, place)
+        except ApiError as error:
+            self.send_error_json(error.status, str(error))
+        except Exception as error:
+            self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
 
-        self.send_response(
-            status_code
-        )
+    def handle_replace_place_aliases(self, place_id: int):
+        try:
+            payload = self.read_json_object()
+            aliases = aliases_from_payload(payload, required=True)
+            place = database.replace_place_aliases(place_id, aliases)
+            if place is None:
+                self.send_error_json(HTTPStatus.NOT_FOUND, "Place not found")
+                return
+            self.send_json(HTTPStatus.OK, place)
+        except ApiError as error:
+            self.send_error_json(error.status, str(error))
+        except Exception as error:
+            self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
 
-        self.send_header(
-            "Content-Type",
-            "application/json; charset=utf-8"
-        )
+    def handle_resolve_destination(self):
+        try:
+            payload = self.read_json_object()
+            utterance_value = payload.get("utterance")
+            if not isinstance(utterance_value, str):
+                raise ApiError("utterance must be a string")
+            utterance = utterance_value.strip()
+            if not utterance:
+                raise ApiError("utterance is required")
+            if len(utterance) > 500:
+                raise ApiError("utterance must be 500 characters or fewer")
 
-        self.send_header(
-            "Content-Length",
-            str(len(response))
-        )
+            language = payload.get("language", "en-US")
+            if not isinstance(language, str) or len(language) > 35:
+                raise ApiError("language must be a string of 35 characters or fewer")
+            language_tag = language.strip().replace("_", "-").casefold()
+            if not language_tag or language_tag.split("-", 1)[0] not in {"en", "zh"}:
+                raise ApiError("language must be an English or Chinese language tag")
+            if not extract_destination_query(utterance):
+                raise ApiError("utterance must include a destination")
 
+            result = resolve_destination(utterance, database.list_places())
+            self.send_json(HTTPStatus.OK, result)
+        except ApiError as error:
+            self.send_error_json(error.status, str(error))
+        except Exception as error:
+            self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+
+    def handle_location_update(self):
+        try:
+            payload = self.read_json_object()
+            latitude = coordinate(payload, "latitude", "lat", -90, 90)
+            longitude = coordinate(payload, "longitude", "lng", -180, 180)
+            source = str(payload.get("source") or "simulator")[:80]
+            updated_at = datetime.now().astimezone().isoformat(timespec="seconds")
+            location = database.set_latest_location(
+                latitude=latitude,
+                longitude=longitude,
+                source=source,
+                updated_at=updated_at,
+            )
+            self.send_json(HTTPStatus.OK, {"status": True, "location": location})
+        except ApiError as error:
+            self.send_error_json(error.status, str(error))
+        except Exception as error:
+            self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+
+    def handle_telemetry_update(self):
+        try:
+            payload = self.read_json_object()
+            latitude = coordinate(payload, "latitude", "lat", -90, 90)
+            longitude = coordinate(payload, "longitude", "lng", -180, 180)
+
+            address = str(payload.get("address") or "").strip()
+            if not address:
+                raise ApiError("address is required")
+            if len(address) > 500:
+                raise ApiError("address must be 500 characters or fewer")
+
+            heading = number_in_range(
+                payload.get("heading", payload.get("direction")),
+                "heading",
+                0,
+                360,
+                maximum_inclusive=False,
+            )
+            battery = number_in_range(payload.get("battery"), "battery", 0, 100)
+            direction = compass_direction(heading)
+            source = str(payload.get("source") or "esp32")[:80]
+            updated_at = datetime.now().astimezone().isoformat(timespec="seconds")
+
+            telemetry = database.set_latest_location(
+                latitude=latitude,
+                longitude=longitude,
+                address=address,
+                heading=heading,
+                direction=direction,
+                battery=battery,
+                source=source,
+                updated_at=updated_at,
+            )
+            self.send_json(
+                HTTPStatus.OK,
+                {"status": True, "telemetry": telemetry},
+            )
+        except ApiError as error:
+            self.send_error_json(error.status, str(error))
+        except Exception as error:
+            self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+
+    def read_json_object(self) -> dict:
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except ValueError as error:
+            raise ApiError("Invalid Content-Length") from error
+        if content_length <= 0:
+            raise ApiError("Request body is empty")
+        if content_length > MAX_JSON_BYTES:
+            raise ApiError("JSON request is too large")
+
+        try:
+            payload = json.loads(self.rfile.read(content_length).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ApiError("Invalid JSON") from error
+        if not isinstance(payload, dict):
+            raise ApiError("JSON body must be an object")
+        return payload
+
+    def route_not_found(self):
+        self.send_error_json(HTTPStatus.NOT_FOUND, "Route not found")
+
+    def send_error_json(self, status: HTTPStatus, message: str):
+        self.send_json(status, {"status": False, "message": message})
+
+    def send_json(self, status: HTTPStatus, payload):
+        response = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(response)))
         self.end_headers()
-
         self.wfile.write(response)
 
 
-# =========================================================
-# START SERVER
-# =========================================================
+def coordinate(
+    payload: dict,
+    primary: str,
+    fallback: str,
+    minimum: float,
+    maximum: float,
+) -> float:
+    value = payload.get(primary, payload.get(fallback))
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as error:
+        raise ApiError(f"{primary} must be a number") from error
+    if not math.isfinite(parsed) or not minimum <= parsed <= maximum:
+        raise ApiError(f"{primary} must be between {minimum:g} and {maximum:g}")
+    return parsed
 
-def main():
 
-    server = ThreadingHTTPServer(
-        (HOST, PORT),
-        PlacesHandler
+def aliases_from_payload(payload: dict, *, required: bool = False) -> list[str]:
+    if "aliases" not in payload:
+        if required:
+            raise ApiError("aliases is required")
+        return []
+
+    values = payload["aliases"]
+    if not isinstance(values, list):
+        raise ApiError("aliases must be an array of strings")
+    if len(values) > 20:
+        raise ApiError("aliases must contain at most 20 items")
+
+    aliases = []
+    for value in values:
+        if not isinstance(value, str):
+            raise ApiError("Each alias must be a string")
+        alias = value.strip()
+        if not alias:
+            raise ApiError("Aliases cannot be empty")
+        if len(alias) > 100:
+            raise ApiError("Each alias must be 100 characters or fewer")
+        aliases.append(alias)
+    return aliases
+
+
+def place_aliases_path_id(path: str) -> int | None:
+    parts = path.strip("/").split("/")
+    if len(parts) != 4 or parts[:2] != ["api", "places"] or parts[3] != "aliases":
+        return None
+    try:
+        return int(parts[2])
+    except ValueError:
+        return None
+
+
+def percentage(value, field: str) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as error:
+        raise ApiError(f"{field} must be a number") from error
+    if not math.isfinite(parsed) or not 0 <= parsed <= 1:
+        raise ApiError(f"{field} must be between 0 and 1")
+    return parsed
+
+
+def number_in_range(
+    value,
+    field: str,
+    minimum: float,
+    maximum: float,
+    *,
+    maximum_inclusive: bool = True,
+) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as error:
+        raise ApiError(f"{field} must be a number") from error
+
+    in_range = (
+        minimum <= parsed <= maximum
+        if maximum_inclusive
+        else minimum <= parsed < maximum
     )
-
-    print(
-        f"Saved Places server running at "
-        f"http://localhost:{PORT}"
-    )
-
-    print(
-        f"Data file: {DATA_FILE}"
-    )
-
-    server.serve_forever()
+    if not math.isfinite(parsed) or not in_range:
+        range_text = (
+            f"between {minimum:g} and {maximum:g}"
+            if maximum_inclusive
+            else f"at least {minimum:g} and less than {maximum:g}"
+        )
+        raise ApiError(f"{field} must be {range_text}")
+    return parsed
 
 
-if __name__ == "__main__":
-    main()
+def compass_direction(heading: float) -> str:
+    labels = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+    return labels[int((heading + 22.5) // 45) % len(labels)]

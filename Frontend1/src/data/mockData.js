@@ -1,8 +1,6 @@
 export const dashboardData = {
   online: true,
 
-  battery: 82,
-
   location: {
     current: {
       lat: 25.033,

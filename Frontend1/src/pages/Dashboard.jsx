@@ -10,7 +10,6 @@ import api from "../services/api";
 const OFFLINE_DASHBOARD = {
   backendOnline: false,
   online: false,
-  battery: null,
   address: "",
   heading: null,
   direction: null,
@@ -103,7 +102,6 @@ export default function Dashboard() {
       <Header
         online={dashboard.online}
         backendOnline={dashboard.backendOnline}
-        battery={dashboard.battery}
         address={dashboard.address}
         heading={dashboard.heading}
         direction={dashboard.direction}

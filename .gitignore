@@ -1,64 +1,23 @@
-# BlindAssistDevice repo-specific ignore rules
+# Android Studio / IntelliJ
+.idea/
+*.iml
 
-# Python / Django / AI server
-__pycache__/
-*.py[cod]
-*.log
-*.sqlite3
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+# OS
+.DS_Store
+Thumbs.db
+# ESP32 Wi-Fi credentials
+esp32/**/secrets.h
+esp32/**/build/
+# Files saved by tools/mock_ai_server.py
+mock_ai_output/
 
-venv/
-env/
-.venv/
-
-# Local environment and secrets
+# AI server and frontend local/generated files
 .env
 .env.*
 !.env.example
-secret_key.txt
-
-# Frontend tooling
-node_modules/
-dist/
-.cache/
-
-# ESP32 / PlatformIO build output
-.pio/
-.pioenvs/
-.pio/build/
-*.o
-*.a
-*.elf
-*.bin
-*.map
-
-# AI model and runtime artifacts
-runs/
-*.pt
-*.onnx
-*.h5
-*.tflite
-
-# Generated media and temporary files
-*.wav
-*.mp3
-*.pcm
-*.aac
-*.mp4
-*.avi
-logs/
-tmp/
-*.tmp
-*.bak
-
-!AiServer/ai_server/core/speech/*.wav
-AiServer/.model_cache/
-AiServer/temp_audio/
-
-# Editor / OS noise
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
+__pycache__/
+*.py[cod]
+*.log
+**/node_modules/
+**/dist/
+AiServer/runtime/

@@ -1,0 +1,1 @@
+"""BlindAssist AI services."""

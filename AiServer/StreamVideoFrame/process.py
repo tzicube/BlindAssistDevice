@@ -1,12 +1,6 @@
 import logging
 
-try:
-    from AiServer.imageProcess.last_image_store import (
-        get_last_image_path,
-        store_last_image_bytes,
-    )
-except ModuleNotFoundError:
-    from imageProcess.last_image_store import get_last_image_path, store_last_image_bytes
+from AiServer.imageProcess.last_image_store import store_last_image_bytes
 
 
 logger = logging.getLogger("blind_assist.stream_video_frame")
@@ -32,10 +26,6 @@ def process_video_frame_request(
         logger.error("Video frame payload is empty")
         raise ValueError("Image payload is empty")
 
-    last_image_path = store_last_image_bytes(image_bytes)
-
-    logger.debug(
-        "Video frame request completed successfully | last_image=%s",
-        last_image_path,
-    )
+    store_last_image_bytes(image_bytes)
+    logger.debug("Video frame request completed successfully")
     return {"status": True}

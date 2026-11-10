@@ -1,7 +1,5 @@
 import {
   LuAccessibility,
-  LuBattery,
-  LuBatteryLow,
   LuClock3,
   LuMapPin,
   LuNavigation2,
@@ -13,7 +11,6 @@ import {
 export default function Header({
   online,
   backendOnline,
-  battery,
   address,
   heading,
   direction,
@@ -42,20 +39,6 @@ export default function Header({
         };
 
   const ConnectionIcon = connection.icon;
-  const parsedBattery = Number(battery);
-  const batteryPercent = Number.isFinite(parsedBattery)
-    ? Math.max(0, Math.min(100, Math.round(parsedBattery)))
-    : null;
-  const BatteryIcon = batteryPercent !== null && batteryPercent <= 20
-    ? LuBatteryLow
-    : LuBattery;
-  const batteryTone = batteryPercent === null
-    ? "text-slate-400"
-    : batteryPercent <= 20
-      ? "text-rose-600"
-      : batteryPercent <= 40
-        ? "text-amber-500"
-        : "text-emerald-600";
   const headingNumber = heading === null || heading === undefined || heading === ""
     ? null
     : Number(heading);
@@ -70,9 +53,9 @@ export default function Header({
     <header className="border-b border-slate-200/80 bg-white/95 backdrop-blur">
       <div className="mx-auto flex w-full max-w-none flex-col gap-4 px-3 py-4 sm:px-4 lg:flex-row lg:items-center lg:justify-between lg:px-5 2xl:px-6 2xl:py-5">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white shadow-sm shadow-blue-200">
+          {/* <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-blue-600 text-white shadow-sm shadow-blue-200">
             <LuAccessibility className="h-6 w-6" aria-hidden="true" />
-          </div>
+          </div> */}
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">
               ClearPath
@@ -113,13 +96,6 @@ export default function Header({
               <p className="font-medium tabular-nums text-slate-700">{directionText}</p>
               <p className="text-[11px] text-slate-400">Device heading</p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5">
-            <BatteryIcon className={`h-4 w-4 shrink-0 ${batteryTone}`} aria-hidden="true" />
-            <span className={`font-semibold tabular-nums ${batteryTone}`}>
-              {batteryPercent === null ? "--%" : `${batteryPercent}%`}
-            </span>
           </div>
 
           <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 font-medium tabular-nums text-slate-700">

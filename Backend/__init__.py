@@ -1,0 +1,1 @@
+"""BlindAssist backend package."""

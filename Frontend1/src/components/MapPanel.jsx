@@ -86,6 +86,9 @@ function MapController({
         lng: event.latlng.lng,
       });
     },
+    dragstart() {
+      setFollowing(false);
+    },
   });
 
   const currentLat = currentPosition?.lat;
@@ -106,60 +109,6 @@ function MapController({
 
     return () => window.cancelAnimationFrame(animationFrame);
   }, [expanded, map]);
-
-  useEffect(() => {
-    const container = map.getContainer();
-    let rightDragging = false;
-    let lastX = 0;
-    let lastY = 0;
-
-    const stopRightDrag = () => {
-      if (!rightDragging) return;
-      rightDragging = false;
-      container.style.cursor = "crosshair";
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-
-    const handleMouseMove = (event) => {
-      if (!rightDragging) return;
-      event.preventDefault();
-
-      const deltaX = event.clientX - lastX;
-      const deltaY = event.clientY - lastY;
-      map.panBy([-deltaX, -deltaY], { animate: false });
-      lastX = event.clientX;
-      lastY = event.clientY;
-    };
-
-    const handleMouseUp = (event) => {
-      if (event.button === 2) stopRightDrag();
-    };
-
-    const handleMouseDown = (event) => {
-      if (event.button !== 2) return;
-      event.preventDefault();
-      event.stopPropagation();
-      rightDragging = true;
-      lastX = event.clientX;
-      lastY = event.clientY;
-      container.style.cursor = "grabbing";
-      setFollowing(false);
-      window.addEventListener("mousemove", handleMouseMove, { passive: false });
-      window.addEventListener("mouseup", handleMouseUp);
-    };
-
-    const handleContextMenu = (event) => event.preventDefault();
-
-    container.addEventListener("mousedown", handleMouseDown, true);
-    container.addEventListener("contextmenu", handleContextMenu);
-
-    return () => {
-      stopRightDrag();
-      container.removeEventListener("mousedown", handleMouseDown, true);
-      container.removeEventListener("contextmenu", handleContextMenu);
-    };
-  }, [map, setFollowing]);
 
   return null;
 }
@@ -342,9 +291,9 @@ export default function MapPanel({
               Recenter
             </button>
           )}
-          <span className="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 sm:inline-flex">
-            {expanded ? "Right-drag to move" : `${markers.length} saved`}
-          </span>
+          {/* <span className="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600 sm:inline-flex">
+            {expanded ? "Hold left mouse to drag" : `${markers.length} saved`}
+          </span> */}
           {expanded && (
             <button
               type="button"
@@ -375,13 +324,13 @@ export default function MapPanel({
             zoom={DEFAULT_MAP_ZOOM}
             minZoom={3}
             maxZoom={20}
-            dragging={false}
+            dragging
             scrollWheelZoom="center"
             doubleClickZoom="center"
             touchZoom="center"
             boxZoom={false}
             keyboard={false}
-            className="h-full w-full cursor-crosshair"
+            className="h-full w-full"
           >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -464,6 +413,19 @@ export default function MapPanel({
               <LuMaximize2 className="h-4 w-4" aria-hidden="true" />
               Click to expand
             </div>
+          )}
+
+          {!expanded && currentPosition && (
+            <button
+              type="button"
+              onClick={() => setFollowing(true)}
+              disabled={following}
+              className="absolute bottom-3 right-3 z-[900] inline-flex min-h-10 items-center gap-2 rounded-xl border border-blue-200 bg-white/95 px-3 text-xs font-semibold text-blue-700 shadow-lg backdrop-blur transition hover:bg-blue-50 disabled:cursor-default disabled:border-slate-200 disabled:text-slate-400"
+              title={following ? "Map is centered on the device" : "Center the map on the device"}
+            >
+              <LuLocateFixed className="h-4 w-4" aria-hidden="true" />
+              Recenter
+            </button>
           )}
         </div>
 

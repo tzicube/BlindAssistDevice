@@ -376,7 +376,6 @@ export default function MapPanel({ navigation }) {
 //     setError("Unable to connect backend.");
 
 //     setDashboard({
-//       battery: 95,
 //       online: false,
 //       gps: "Unavailable",
 //       signal: "Disconnected",
@@ -418,7 +417,6 @@ export default function MapPanel({ navigation }) {
 
 //     <div className="min-h-screen bg-gray-100">
 //       <Header
-//         battery={dashboard.battery}
 //         online={dashboard.online}
 //         gps={dashboard.gps}
 //         signal={dashboard.signal}
