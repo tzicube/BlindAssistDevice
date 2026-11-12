@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from AiServer.Recognize import process
 
@@ -126,6 +126,23 @@ class OllamaLifecycleTest(unittest.TestCase):
 
         get_stt.assert_called_once_with()
         get_tts.assert_called_once_with()
+
+    def test_speech_services_are_closed_and_reset(self):
+        tts = MagicMock()
+        original_stt = process._stt_instance
+        original_tts = process._tts_instance
+        process._stt_instance = MagicMock()
+        process._tts_instance = tts
+
+        try:
+            process.shutdown_speech_services()
+            self.assertIsNone(process._stt_instance)
+            self.assertIsNone(process._tts_instance)
+        finally:
+            process._stt_instance = original_stt
+            process._tts_instance = original_tts
+
+        tts.close.assert_called_once_with()
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ from AiServer.AiConfig import AssistantConfig
 
 if TYPE_CHECKING:
     from AiServer.speech.stt import WhisperSTT
-    from AiServer.speech.tts import PiperTTS
+    from AiServer.speech.tts import TextToSpeech
 
 from AiServer.imageProcess.last_image_store import load_last_image_bytes
 
@@ -32,7 +32,7 @@ ALLOWED_CONTENT_TYPES = {"audio/wav", "audio/x-wav", "audio/wave"}
 SENTENCE_ENDINGS = frozenset(".,!?。，！？")
 
 _stt_instance: WhisperSTT | None = None
-_tts_instance: PiperTTS | None = None
+_tts_instance: TextToSpeech | None = None
 _service_lock = Lock()
 
 
@@ -226,7 +226,7 @@ def unload_ollama_model() -> None:
 
 
 def preload_speech_services() -> None:
-    """Load Whisper and Piper during startup to remove first-request latency."""
+    """Load Whisper and the configured TTS during startup."""
     _get_stt()
     _get_tts()
 
@@ -250,19 +250,35 @@ def _get_stt() -> WhisperSTT:
     return _stt_instance
 
 
-def _get_tts() -> PiperTTS:
+def _get_tts() -> TextToSpeech:
     global _tts_instance
 
     if _tts_instance is None:
         with _service_lock:
             if _tts_instance is None:
-                from AiServer.speech.tts import PiperTTS
+                from AiServer.speech.tts import create_tts
 
-                logger.info("Initializing Piper TTS service")
-                _tts_instance = PiperTTS()
-                logger.info("Piper TTS service initialized")
+                logger.info("Initializing configured TTS service")
+                _tts_instance = create_tts()
+                logger.info(
+                    "TTS service initialized | provider=%s",
+                    type(_tts_instance).__name__,
+                )
 
     return _tts_instance
+
+
+def shutdown_speech_services() -> None:
+    """Release the persistent TTS worker during graceful shutdown."""
+    global _stt_instance, _tts_instance
+
+    with _service_lock:
+        tts_instance = _tts_instance
+        _tts_instance = None
+        _stt_instance = None
+
+    if tts_instance is not None:
+        tts_instance.close()
 
 
 def _save_audio_request(audio_bytes: bytes, request_dir: Path) -> Path:

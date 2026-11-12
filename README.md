@@ -89,7 +89,7 @@ BlindAssistGlasses/
 
 ## Related Repository
 
-[BlindAssistDevice](https://github.com/tzicube/BlindAssistDevice): AI server (Whisper + Gemma + Piper) and family dashboard.
+[BlindAssistDevice](https://github.com/tzicube/BlindAssistDevice): AI server (Whisper + Gemma + local Windows TTS) and family dashboard.
 The app's 「問問題」 button talks to its AI server; see `docs/ai_server_integration.md` (API, testing, what the server still needs).
 
 ## Status

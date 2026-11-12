@@ -43,3 +43,16 @@ class PiperTTSConfig:
     output_dir: Path = BASE_DIR / "runtime" / "tts"
     audio_format: str = "wav"
 
+
+@dataclass(frozen=True)
+class WindowsTTSConfig:
+    voice_name: str = os.getenv(
+        "WINDOWS_TTS_VOICE",
+        "Microsoft Hanhan Desktop - Chinese (Taiwan)",
+    )
+    output_dir: Path = BASE_DIR / "runtime" / "tts"
+    audio_format: str = "wav"
+    rate: int = int(os.getenv("WINDOWS_TTS_RATE", "0"))
+    volume: int = int(os.getenv("WINDOWS_TTS_VOLUME", "100"))
+    timeout_seconds: float = float(os.getenv("WINDOWS_TTS_TIMEOUT_SECONDS", "60"))
+

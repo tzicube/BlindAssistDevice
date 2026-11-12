@@ -185,6 +185,72 @@ class UnifiedServerTest(unittest.TestCase):
         self.assertEqual(400, status)
         self.assertIn(b"battery", body)
 
+    def test_caution_event_is_exposed_to_dashboard(self):
+        caution_payload = {
+            "event": "fall",
+            "message": "使用者可能跌倒",
+            "sizeG": 0.85,
+            "time": 1763000000000,
+            "latitude": 24.990782,
+            "longitude": 121.346525,
+            "heading": 92.0,
+            "direction": "東",
+            "source": "android-app",
+            "sensor": "esp32",
+        }
+        status, content_type, body = self.request(
+            "POST",
+            "/api/caution",
+            json.dumps(caution_payload, ensure_ascii=False).encode("utf-8"),
+            {"Content-Type": "application/json"},
+        )
+
+        self.assertEqual(202, status)
+        self.assertTrue(content_type.startswith("application/json"))
+        accepted = json.loads(body)["caution"]
+        self.assertEqual("fall:1763000000000:android-app:esp32", accepted["id"])
+        self.assertEqual("使用者可能跌倒", accepted["message"])
+
+        status, _, body = self.request("GET", "/api/status")
+        self.assertEqual(200, status)
+        dashboard = json.loads(body)
+        self.assertEqual(accepted, dashboard["caution"])
+
+        status, _, body = self.request("GET", "/api/caution")
+        self.assertEqual(200, status)
+        self.assertEqual(accepted, json.loads(body)["caution"])
+
+    def test_ip_caution_alias_and_validation(self):
+        caution_payload = {
+            "event": "fall",
+            "message": "使用者可能跌倒",
+            "sizeG": 0.85,
+            "time": 1763000000001,
+            "latitude": 24.990782,
+            "longitude": 121.346525,
+            "heading": 92.0,
+            "direction": "東",
+            "source": "android-app",
+            "sensor": "esp32",
+        }
+        status, _, _ = self.request(
+            "POST",
+            "/ip/caution",
+            json.dumps(caution_payload, ensure_ascii=False).encode("utf-8"),
+            {"Content-Type": "application/json"},
+        )
+        self.assertEqual(202, status)
+
+        caution_payload.pop("message")
+        status, _, body = self.request(
+            "POST",
+            "/api/caution",
+            json.dumps(caution_payload).encode("utf-8"),
+            {"Content-Type": "application/json"},
+        )
+        self.assertEqual(400, status)
+        self.assertIn(b"message", body)
+
     def test_resolves_saved_place_alias_and_returns_not_found(self):
         place_payload = json.dumps(
             {
@@ -354,6 +420,7 @@ class UnifiedServerLifecycleTest(unittest.TestCase):
                 ),
                 patch.object(recognize_process, "preload_ollama_model") as preload,
                 patch.object(recognize_process, "preload_speech_services") as speech,
+                patch.object(recognize_process, "shutdown_speech_services") as shutdown,
                 patch.object(recognize_process, "unload_ollama_model") as unload,
             ):
                 exit_code = unified_server.main()
@@ -363,6 +430,7 @@ class UnifiedServerLifecycleTest(unittest.TestCase):
         self.assertEqual(0, exit_code)
         preload.assert_called_once_with()
         speech.assert_called_once_with()
+        shutdown.assert_called_once_with()
         unload.assert_called_once_with()
         server.serve_forever.assert_called_once_with()
         server.server_close.assert_called_once_with()

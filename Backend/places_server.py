@@ -48,6 +48,11 @@ class PlacesHandler(BaseHTTPRequestHandler):
                 HTTPStatus.OK,
                 {"status": True, "location": database.get_latest_location()},
             )
+        elif path == "/api/caution":
+            self.send_json(
+                HTTPStatus.OK,
+                {"status": True, "caution": database.get_latest_caution()},
+            )
         elif path == "/api/places":
             self.send_json(HTTPStatus.OK, database.list_places())
         else:
@@ -63,6 +68,8 @@ class PlacesHandler(BaseHTTPRequestHandler):
             self.handle_create_place()
         elif path == "/api/navigation/resolve":
             self.handle_resolve_destination()
+        elif path in {"/api/caution", "/ip/caution"}:
+            self.handle_caution()
         else:
             self.route_not_found()
 
@@ -109,6 +116,7 @@ class PlacesHandler(BaseHTTPRequestHandler):
 
     def handle_status(self):
         location = database.get_latest_location()
+        caution = database.get_latest_caution()
         gps = (
             f"{location['latitude']:.6f}, {location['longitude']:.6f}"
             if location
@@ -134,6 +142,7 @@ class PlacesHandler(BaseHTTPRequestHandler):
                     "direction": location.get("direction"),
                 } if location else {},
                 "detections": [],
+                "caution": caution,
                 "systemStatus": (
                     f"Telemetry received from {location['source']}"
                     if location
@@ -141,6 +150,58 @@ class PlacesHandler(BaseHTTPRequestHandler):
                 ),
             },
         )
+
+    def handle_caution(self):
+        try:
+            payload = self.read_json_object()
+            event = required_text(payload, "event", maximum_length=50)
+            message = required_text(payload, "message", maximum_length=500)
+            size_g = number_in_range(payload.get("sizeG"), "sizeG", 0, 100)
+            event_time = integer_in_range(
+                payload.get("time"),
+                "time",
+                0,
+                9_007_199_254_740_991,
+            )
+            latitude = coordinate(payload, "latitude", "lat", -90, 90)
+            longitude = coordinate(payload, "longitude", "lng", -180, 180)
+            heading = number_in_range(
+                payload.get("heading"),
+                "heading",
+                0,
+                360,
+                maximum_inclusive=False,
+            )
+            direction = required_text(payload, "direction", maximum_length=20)
+            source = required_text(payload, "source", maximum_length=80)
+            sensor = required_text(payload, "sensor", maximum_length=80)
+            received_at = datetime.now().astimezone().isoformat(timespec="seconds")
+
+            caution = database.set_latest_caution(
+                event=event,
+                message=message,
+                size_g=size_g,
+                event_time=event_time,
+                latitude=latitude,
+                longitude=longitude,
+                heading=heading,
+                direction=direction,
+                source=source,
+                sensor=sensor,
+                received_at=received_at,
+            )
+            # Android sends this event as a short-lived request. Closing the
+            # connection after the response avoids waiting for another HTTP/1.1
+            # request on a socket that the phone immediately tears down.
+            self.close_connection = True
+            self.send_json(
+                HTTPStatus.ACCEPTED,
+                {"status": True, "caution": caution},
+            )
+        except ApiError as error:
+            self.send_error_json(error.status, str(error))
+        except Exception as error:
+            self.send_error_json(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
 
     def handle_create_place(self):
         try:
@@ -310,6 +371,8 @@ class PlacesHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(response)))
+        if self.close_connection:
+            self.send_header("Connection", "close")
         self.end_headers()
         self.wfile.write(response)
 
@@ -328,6 +391,38 @@ def coordinate(
         raise ApiError(f"{primary} must be a number") from error
     if not math.isfinite(parsed) or not minimum <= parsed <= maximum:
         raise ApiError(f"{primary} must be between {minimum:g} and {maximum:g}")
+    return parsed
+
+
+def required_text(payload: dict, field: str, *, maximum_length: int) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str):
+        raise ApiError(f"{field} must be a string")
+    text = value.strip()
+    if not text:
+        raise ApiError(f"{field} is required")
+    if len(text) > maximum_length:
+        raise ApiError(f"{field} must be {maximum_length} characters or fewer")
+    return text
+
+
+def integer_in_range(
+    value,
+    field: str,
+    minimum: int,
+    maximum: int,
+) -> int:
+    if isinstance(value, bool):
+        raise ApiError(f"{field} must be an integer")
+    try:
+        parsed_number = float(value)
+        parsed = int(parsed_number)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise ApiError(f"{field} must be an integer") from error
+    if not math.isfinite(parsed_number) or parsed_number != parsed:
+        raise ApiError(f"{field} must be an integer")
+    if not minimum <= parsed <= maximum:
+        raise ApiError(f"{field} must be between {minimum} and {maximum}")
     return parsed
 
 

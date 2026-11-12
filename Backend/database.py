@@ -83,6 +83,23 @@ class BackendDatabase:
                     source TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS latest_caution (
+                    singleton_id INTEGER PRIMARY KEY CHECK (singleton_id = 1),
+                    event_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    size_g REAL NOT NULL,
+                    event_time INTEGER NOT NULL,
+                    latitude REAL NOT NULL,
+                    longitude REAL NOT NULL,
+                    address TEXT NOT NULL DEFAULT '',
+                    heading REAL NOT NULL,
+                    direction TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    sensor TEXT NOT NULL,
+                    received_at TEXT NOT NULL
+                );
                 """
             )
             saved_place_columns = {
@@ -110,6 +127,16 @@ class BackendDatabase:
                     connection.execute(
                         f"ALTER TABLE latest_location ADD COLUMN {column} {definition}"
                     )
+
+            latest_caution_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(latest_caution)")
+            }
+            if "address" not in latest_caution_columns:
+                connection.execute(
+                    "ALTER TABLE latest_caution "
+                    "ADD COLUMN address TEXT NOT NULL DEFAULT ''"
+                )
         self._migrate_legacy_places_once()
 
     def _migrate_legacy_places_once(self):
@@ -337,11 +364,134 @@ class BackendDatabase:
                 "DELETE FROM latest_location WHERE singleton_id = 1"
             )
 
+    def get_latest_caution(self) -> dict | None:
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT event_id, event_type, message, size_g, event_time,
+                       latitude, longitude, address, heading, direction, source,
+                       sensor, received_at
+                FROM latest_caution
+                WHERE singleton_id = 1
+                """
+            ).fetchone()
+        if row is None:
+            return None
+        return _caution_from_row(row)
+
+    def set_latest_caution(
+        self,
+        *,
+        event: str,
+        message: str,
+        size_g: float,
+        event_time: int,
+        latitude: float,
+        longitude: float,
+        heading: float,
+        direction: str,
+        source: str,
+        sensor: str,
+        received_at: str,
+        address: str = "",
+    ) -> dict:
+        event_id = f"{event}:{event_time}:{source}:{sensor}"
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO latest_caution
+                    (singleton_id, event_id, event_type, message, size_g,
+                     event_time, latitude, longitude, address, heading, direction,
+                     source, sensor, received_at)
+                VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(singleton_id) DO UPDATE SET
+                    event_id = excluded.event_id,
+                    event_type = excluded.event_type,
+                    message = excluded.message,
+                    size_g = excluded.size_g,
+                    event_time = excluded.event_time,
+                    latitude = excluded.latitude,
+                    longitude = excluded.longitude,
+                    address = excluded.address,
+                    heading = excluded.heading,
+                    direction = excluded.direction,
+                    source = excluded.source,
+                    sensor = excluded.sensor,
+                    received_at = excluded.received_at
+                """,
+                (
+                    event_id,
+                    event,
+                    message,
+                    size_g,
+                    event_time,
+                    latitude,
+                    longitude,
+                    address,
+                    heading,
+                    direction,
+                    source,
+                    sensor,
+                    received_at,
+                ),
+            )
+        return {
+            "id": event_id,
+            "event": event,
+            "message": message,
+            "sizeG": size_g,
+            "time": event_time,
+            "latitude": latitude,
+            "longitude": longitude,
+            "address": address,
+            "heading": heading,
+            "direction": direction,
+            "source": source,
+            "sensor": sensor,
+            "receivedAt": received_at,
+        }
+
+    def update_caution_address(self, event_id: str, address: str) -> bool:
+        with self.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE latest_caution
+                SET address = ?
+                WHERE singleton_id = 1 AND event_id = ?
+                """,
+                (address, event_id),
+            )
+        return cursor.rowcount > 0
+
+    def clear_latest_caution(self):
+        with self.connect() as connection:
+            connection.execute(
+                "DELETE FROM latest_caution WHERE singleton_id = 1"
+            )
+
 
 def _optional_float(value) -> float | None:
     if value is None or value == "":
         return None
     return float(value)
+
+
+def _caution_from_row(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["event_id"],
+        "event": row["event_type"],
+        "message": row["message"],
+        "sizeG": row["size_g"],
+        "time": row["event_time"],
+        "latitude": row["latitude"],
+        "longitude": row["longitude"],
+        "address": row["address"] or "",
+        "heading": row["heading"],
+        "direction": row["direction"],
+        "source": row["source"],
+        "sensor": row["sensor"],
+        "receivedAt": row["received_at"],
+    }
 
 
 def _aliases_by_place(connection: sqlite3.Connection) -> dict[int, list[str]]:

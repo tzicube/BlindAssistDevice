@@ -162,6 +162,39 @@ class BackendDatabaseTest(unittest.TestCase):
         reopened.clear_latest_location()
         self.assertIsNone(reopened.get_latest_location())
 
+    def test_latest_caution_survives_new_database_instance(self):
+        database = self.database()
+        database.initialize()
+        expected = database.set_latest_caution(
+            event="fall",
+            message="使用者可能跌倒",
+            size_g=0.85,
+            event_time=1763000000000,
+            latitude=24.990782,
+            longitude=121.346525,
+            heading=92.0,
+            direction="東",
+            source="android-app",
+            sensor="esp32",
+            received_at="2026-11-13T00:30:00+08:00",
+        )
+
+        reopened = self.database()
+        reopened.initialize()
+        self.assertEqual(expected, reopened.get_latest_caution())
+        self.assertTrue(
+            reopened.update_caution_address(
+                expected["id"],
+                "桃園市龜山區文化一路",
+            )
+        )
+        self.assertEqual(
+            "桃園市龜山區文化一路",
+            reopened.get_latest_caution()["address"],
+        )
+        reopened.clear_latest_caution()
+        self.assertIsNone(reopened.get_latest_caution())
+
     def test_migrates_existing_latest_location_table_for_telemetry(self):
         connection = sqlite3.connect(self.db_path)
         try:

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LuCircleAlert } from "react-icons/lu";
 
 import CameraPanel from "../components/CameraPanel";
+import CautionModal from "../components/CautionModal";
 import Header from "../components/Header";
 import MapPanel from "../components/MapPanel";
 import SavedPlaces from "../components/SavedPlaces";
@@ -25,6 +26,8 @@ export default function Dashboard() {
   const [savedPlaces, setSavedPlaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [activeCaution, setActiveCaution] = useState(null);
+  const shownCautionId = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -38,6 +41,11 @@ export default function Dashboard() {
         if (active) {
           setDashboard(data);
           setError("");
+          const cautionId = data.caution?.id;
+          if (cautionId && cautionId !== shownCautionId.current) {
+            shownCautionId.current = cautionId;
+            setActiveCaution(data.caution);
+          }
         }
       } catch (requestError) {
         console.error(requestError);
@@ -108,6 +116,13 @@ export default function Dashboard() {
         gps={dashboard.gps}
         time={dashboard.time}
       />
+
+      {activeCaution && (
+        <CautionModal
+          caution={activeCaution}
+          onClose={() => setActiveCaution(null)}
+        />
+      )}
 
       <main className="mx-auto w-full max-w-none px-3 py-4 sm:px-4 sm:py-5 lg:px-5 lg:py-6 2xl:px-6">
         {error && (

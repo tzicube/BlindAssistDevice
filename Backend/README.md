@@ -14,7 +14,7 @@ In real AI mode, startup waits for the configured Ollama model to load. The
 model remains resident for the server's lifetime (`OLLAMA_KEEP_ALIVE=-1`) and is
 released during a clean shutdown. Ollama itself must already be running.
 
-For development checks without Whisper, Ollama or Piper, use
+For development checks without Whisper, Ollama or the configured TTS, use
 `python unified_server.py --mock-ai`.
 
 Endpoints:
@@ -26,15 +26,20 @@ Endpoints:
 - `PUT /api/places/{id}/aliases`
 - `DELETE /api/places/{id}`
 - `POST /api/navigation/resolve`
+- `GET`, `POST /api/caution` (`POST /ip/caution` is also accepted)
 - `GET /api/image`
 - `POST /api/videoframe`
 - `POST /api/recognize`
 
 `POST /api/recognize` supports sentence-level audio streaming when the client
 sends `Accept: application/x-ndjson`. Ollama tokens are split at `.`, `,`, `。`,
-`，`, `!`, `?`, `！`, or `？`; Piper converts each completed phrase to WAV and
-the server flushes it immediately. Clients without that header still receive one
-`audio/wav`.
+`，`, `!`, `?`, `！`, or `？`; the configured persistent TTS converts each
+completed phrase to WAV and the server flushes it immediately. Clients without
+that header still receive one `audio/wav`. The default TTS is the local Windows
+SAPI voice Microsoft Hanhan Desktop (`zh-TW`); set `TTS_ENGINE=piper` to use the
+Piper fallback.
+The Windows adapter requires `pywin32` and keeps one SAPI worker alive for the
+server lifetime so punctuation-sized phrases do not start a new process.
 
 The ESP controls the telemetry interval. For example, it can send this request
 every five seconds; the server only validates, stores and exposes the latest packet:

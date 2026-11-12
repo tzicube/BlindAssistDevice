@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import socket
+import sys
 import time
 from datetime import datetime
 from http import HTTPStatus
@@ -90,9 +91,32 @@ class ExclusiveThreadingHTTPServer(ThreadingHTTPServer):
             )
         super().server_bind()
 
+    def handle_error(self, request, client_address):
+        error = sys.exception()
+        if isinstance(error, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+            logger.info(
+                "Client closed HTTP connection | client=%s:%s | error=%s",
+                client_address[0],
+                client_address[1],
+                error,
+            )
+            return
+        super().handle_error(request, client_address)
+
 
 class UnifiedHandler(backend_api.PlacesHandler):
     protocol_version = "HTTP/1.1"
+
+    def handle(self):
+        try:
+            super().handle()
+        except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError) as error:
+            logger.info(
+                "Client disconnected during HTTP request | client=%s:%s | error=%s",
+                self.client_address[0],
+                self.client_address[1],
+                error,
+            )
 
     def log_message(self, format, *args):
         if self.request_path in QUIET_REQUEST_PATHS:
@@ -395,7 +419,7 @@ def main() -> int:
     parser.add_argument(
         "--mock-ai",
         action="store_true",
-        help="Return a chime instead of running Whisper, Ollama and Piper.",
+        help="Return a chime instead of running Whisper, Ollama and TTS.",
     )
     parser.add_argument("--mock-delay", type=float, default=0.0)
     parser.add_argument("--mock-reply", type=Path)
@@ -432,7 +456,8 @@ def main() -> int:
     )
     logger.info(
         "Endpoints include /api/status, /api/telemetry, /api/location, /api/places, "
-        "/api/navigation/resolve, /api/image, /api/videoframe and /api/recognize"
+        "/api/navigation/resolve, /api/caution, /api/image, /api/videoframe and "
+        "/api/recognize"
     )
     try:
         server.serve_forever()
@@ -441,6 +466,10 @@ def main() -> int:
     finally:
         server.server_close()
         if recognize_process is not None:
+            try:
+                recognize_process.shutdown_speech_services()
+            except Exception:  # noqa: BLE001
+                logger.exception("Could not shut down speech services cleanly")
             try:
                 recognize_process.unload_ollama_model()
             except Exception:  # noqa: BLE001
