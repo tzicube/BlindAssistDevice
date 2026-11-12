@@ -151,7 +151,7 @@ export default function CameraPanel({ detections }) {
               {status.message}
             </span>
             <span className="rounded-full bg-black/35 px-2.5 py-1 font-medium tabular-nums backdrop-blur">
-              320 × 240 · 4:3 · {CAMERA_FPS} FPS
+              320 × 240 · 4:3 
             </span>
           </figcaption>
         </figure>
