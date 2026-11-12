@@ -1,7 +1,9 @@
-import os
 from pathlib import Path
-import subprocess
+from threading import Lock
 import uuid
+import wave
+
+from piper import PiperVoice
 
 from AiServer.AiConfig import PiperTTSConfig, SUPPORTED_AUDIO_FORMATS
 
@@ -16,6 +18,11 @@ class PiperTTS:
         if self.config.audio_format not in SUPPORTED_AUDIO_FORMATS:
             raise ValueError(f"Unsupported audio format: {self.config.audio_format}")
 
+        # Keep the ONNX voice loaded instead of starting the Piper CLI and
+        # reloading the model for every sentence.
+        self._voice = PiperVoice.load(self.config.model_path)
+        self._synthesis_lock = Lock()
+
     def synthesize(self, text: str, output_path: str | Path | None = None) -> Path:
         if not text or not text.strip():
             raise ValueError("Text cannot be empty")
@@ -24,28 +31,9 @@ class PiperTTS:
             output_path = self.config.output_dir / f"tts_{uuid.uuid4().hex}.wav"
         else:
             output_path = Path(output_path)
-        
+
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        process_environment = os.environ.copy()
-        process_environment["PYTHONIOENCODING"] = "utf-8"
-        process_environment["PYTHONUTF8"] = "1"
-
-        result = subprocess.run(
-            [
-                "piper",
-                "--model",
-                str(self.config.model_path),
-                "--output_file",
-                str(output_path)
-            ],
-            input=text.strip(),
-            text=True,
-            encoding="utf-8",
-            env=process_environment,
-            capture_output=True
-        )
-
-        if result.returncode != 0:
-            raise RuntimeError(f"Piper TTS failed:\n{result.stderr}")
+        with self._synthesis_lock, wave.open(str(output_path), "wb") as wav_file:
+            self._voice.synthesize_wav(text.strip(), wav_file)
 
         return output_path

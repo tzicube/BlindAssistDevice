@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import json
 import logging
 import os
 import socket
@@ -49,6 +51,7 @@ MAX_AUDIO_BYTES = 16 * 1024 * 1024
 
 VIDEOFRAME_PATH = "/api/videoframe"
 RECOGNIZE_PATH = "/api/recognize"
+STREAMING_AUDIO_CONTENT_TYPE = "application/x-ndjson"
 IMAGE_PATH = "/api/image"
 HEALTH_PATH = "/api/health"
 QUIET_REQUEST_PATHS = {VIDEOFRAME_PATH, IMAGE_PATH}
@@ -171,11 +174,27 @@ class UnifiedHandler(backend_api.PlacesHandler):
         try:
             audio_bytes = self.read_bounded_body(MAX_AUDIO_BYTES)
             content_type = self.headers.get("Content-Type")
+            wants_stream = STREAMING_AUDIO_CONTENT_TYPE in (
+                self.headers.get("Accept") or ""
+            ).lower()
             if AI_MODE == "mock":
                 audio_response = process_mock_recognize(audio_bytes, content_type)
+                if wants_stream:
+                    self.send_audio_stream(iter([(1, "Mock response.", audio_response)]))
+                    return
             else:
-                from AiServer.Recognize.process import process_recognize_request
+                from AiServer.Recognize.process import (
+                    process_recognize_request,
+                    process_recognize_request_stream,
+                )
 
+                if wants_stream:
+                    audio_stream = process_recognize_request_stream(
+                        audio_bytes,
+                        content_type,
+                    )
+                    self.send_audio_stream(audio_stream)
+                    return
                 audio_response = process_recognize_request(audio_bytes, content_type)
             self.send_binary(HTTPStatus.OK, audio_response, "audio/wav")
         except RequestBodyError as error:
@@ -189,6 +208,65 @@ class UnifiedHandler(backend_api.PlacesHandler):
             self.send_ai_error(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
         finally:
             RECOGNIZE_LOCK.release()
+
+    def send_audio_stream(self, audio_stream):
+        """Send sentence-level WAV segments as flushable NDJSON HTTP chunks."""
+        self.send_response(HTTPStatus.OK)
+        self.send_header(
+            "Content-Type",
+            f"{STREAMING_AUDIO_CONTENT_TYPE}; charset=utf-8",
+        )
+        self.send_header("Transfer-Encoding", "chunked")
+        self.send_header("Cache-Control", "no-store, no-transform")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+
+        sentence_count = 0
+        try:
+            for index, sentence, audio_bytes in audio_stream:
+                sentence_count = index
+                self.write_stream_event(
+                    {
+                        "type": "audio",
+                        "index": index,
+                        "text": sentence,
+                        "contentType": "audio/wav",
+                        "audio": base64.b64encode(audio_bytes).decode("ascii"),
+                    }
+                )
+
+            self.write_stream_event(
+                {"type": "done", "sentenceCount": sentence_count}
+            )
+        except OSError:
+            logger.info("Streaming audio client disconnected")
+        except Exception as error:  # noqa: BLE001
+            logger.exception("Streaming audio response failed")
+            try:
+                self.write_stream_event({"type": "error", "error": str(error)})
+            except OSError:
+                pass
+        finally:
+            close_stream = getattr(audio_stream, "close", None)
+            if close_stream is not None:
+                try:
+                    close_stream()
+                except Exception:  # noqa: BLE001
+                    logger.debug("Could not close audio stream cleanly", exc_info=True)
+            try:
+                self.wfile.write(b"0\r\n\r\n")
+                self.wfile.flush()
+            except OSError:
+                pass
+
+    def write_stream_event(self, event: dict) -> None:
+        payload = (
+            json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n"
+        ).encode("utf-8")
+        self.wfile.write(f"{len(payload):X}\r\n".encode("ascii"))
+        self.wfile.write(payload)
+        self.wfile.write(b"\r\n")
+        self.wfile.flush()
 
     def read_bounded_body(self, maximum_bytes: int) -> bytes:
         raw_length = self.headers.get("Content-Length")
@@ -333,6 +411,18 @@ def main() -> int:
         logger.error("Cannot bind unified server to %s:%s: %s", HOST, PORT, error)
         return 1
 
+    recognize_process = None
+    if AI_MODE == "real":
+        try:
+            from AiServer.Recognize import process as recognize_process
+
+            recognize_process.preload_ollama_model()
+            recognize_process.preload_speech_services()
+        except Exception:  # noqa: BLE001
+            logger.exception("AI startup failed; unified server was not started")
+            server.server_close()
+            return 1
+
     logger.info(
         "Unified server running at http://%s:%s | AI mode=%s | camera=%s FPS",
         HOST,
@@ -350,6 +440,11 @@ def main() -> int:
         logger.info("Shutdown requested by user")
     finally:
         server.server_close()
+        if recognize_process is not None:
+            try:
+                recognize_process.unload_ollama_model()
+            except Exception:  # noqa: BLE001
+                logger.exception("Could not unload Ollama model during shutdown")
     return 0
 
 

@@ -10,6 +10,10 @@ Run it from the repository root:
 python unified_server.py
 ```
 
+In real AI mode, startup waits for the configured Ollama model to load. The
+model remains resident for the server's lifetime (`OLLAMA_KEEP_ALIVE=-1`) and is
+released during a clean shutdown. Ollama itself must already be running.
+
 For development checks without Whisper, Ollama or Piper, use
 `python unified_server.py --mock-ai`.
 
@@ -25,6 +29,12 @@ Endpoints:
 - `GET /api/image`
 - `POST /api/videoframe`
 - `POST /api/recognize`
+
+`POST /api/recognize` supports sentence-level audio streaming when the client
+sends `Accept: application/x-ndjson`. Ollama tokens are split at `.`, `,`, `。`,
+`，`, `!`, `?`, `！`, or `？`; Piper converts each completed phrase to WAV and
+the server flushes it immediately. Clients without that header still receive one
+`audio/wav`.
 
 The ESP controls the telemetry interval. For example, it can send this request
 every five seconds; the server only validates, stores and exposes the latest packet:

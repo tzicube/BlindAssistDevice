@@ -1,15 +1,20 @@
 # POST /api/videoframe
 
-# Request:
+## Request
+
 Content-Type: image/jpeg
-320x40
-10 FPS2
-# Response:
-application/json
-{
-    "status": true
-}
+
+- Resolution: 320x240
+- Frame rate: 30 FPS
+
+## Response
+
+```json
+{"status": true}
+```
+
 ## Workflow
+
 Continuously send images to the server, so the server can send the images to the web application.
 
 # POST /api/location
@@ -37,7 +42,6 @@ for a fresh test.
 The ESP simulator (or ESP firmware) sends its latest GPS fix to the dashboard API
 on port `8787`. The dashboard displays the coordinates and places a marker on the map.
 
-# ===============================================================================================
 # POST /api/recognize
 
 ## Request
@@ -46,28 +50,43 @@ Content-Type: audio/wav
 
 ## Response
 
-Content-Type: audio/wav
+Legacy clients receive one complete `audio/wav` after the full answer is ready.
+
+For low-latency sentence streaming, send:
+
+```http
+Accept: application/x-ndjson, audio/wav
+```
+
+The response uses chunked `application/x-ndjson`. Each completed sentence is
+sent immediately as a Base64 WAV event, followed by a final `done` event:
+
+```json
+{"type":"audio","index":1,"text":"First sentence.","contentType":"audio/wav","audio":"UklGR..."}
+{"type":"done","sentenceCount":1}
+```
 
 ## Workflow
 
-When the user presses the object recognition button and asks a question such as "What is this?", the ESP device records the user's voice and sends the audio to the server.
+When the user presses the recognition button and asks a question, the device
+records the user's voice and sends the audio to the server.
 
-The server uses Speech-to-Text (STT) to convert the recorded audio into text. The transcribed question and the latest frame (last frame) received from the video streaming service are then passed to Gemma 3 (4B), a multimodal AI model capable of understanding both visual and textual information.
+The server uses Whisper to convert the recording into text. The question and
+latest camera frame are passed to the configured Gemma 3 model. Gemma's token
+stream is split at `.`, `,`, `。`, `，`, `!`, `?`, `！`, or `？`, and the
+persistent Piper voice converts each completed phrase into WAV immediately.
 
-The AI analyzes the latest frame together with the user's question and generates an appropriate textual response. This response is then converted into speech using Text-to-Speech (TTS).
+Streaming clients play every sentence as soon as its WAV event arrives. Clients
+without the streaming `Accept` header continue to receive one complete WAV.
 
-Finally, the server returns the generated audio response in WAV format, allowing the user to hear the answer through the device speaker.
-
-# ===============================================================================================
 # GET /api/image
 
 Response:
-Content-Type: image/jpeg
-Cache-Control: no-store
 
-Body:
-JPEG image bytes
-Resolution: 320x240
+- Content-Type: image/jpeg
+- Cache-Control: no-store
+- Resolution: 320x240
 
 ## Workflow
+
 Return the latest frame received from ESP32.

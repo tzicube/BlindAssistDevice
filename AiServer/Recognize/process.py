@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Iterator
 import json
 import logging
 import os
+import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from threading import Lock
@@ -27,6 +29,7 @@ REPO_ROOT = BASE_DIR.parent
 ENV_PATH = REPO_ROOT / ".env"
 RUNTIME_DIR = BASE_DIR / "runtime"
 ALLOWED_CONTENT_TYPES = {"audio/wav", "audio/x-wav", "audio/wave"}
+SENTENCE_ENDINGS = frozenset(".,!?。，！？")
 
 _stt_instance: WhisperSTT | None = None
 _tts_instance: PiperTTS | None = None
@@ -92,6 +95,16 @@ def _build_ollama_generate_url(raw_value: str) -> str:
     return f"{cleaned_value}/api/generate"
 
 
+def _parse_ollama_keep_alive(raw_value: str) -> int | str:
+    """Return the JSON value expected by Ollama's ``keep_alive`` option."""
+    cleaned_value = raw_value.strip()
+
+    try:
+        return int(cleaned_value)
+    except ValueError:
+        return cleaned_value
+
+
 _ENV_VALUES = _parse_dotenv(ENV_PATH)
 MODEL_NAME = _get_required_config_value(
     _ENV_VALUES,
@@ -102,6 +115,12 @@ OLLAMA_URL = _build_ollama_generate_url(
         _ENV_VALUES,
         "OLLAMA_BASE_URL",
     )
+)
+OLLAMA_KEEP_ALIVE = _parse_ollama_keep_alive(
+    _get_config_value(_ENV_VALUES, "OLLAMA_KEEP_ALIVE") or "-1"
+)
+OLLAMA_STARTUP_TIMEOUT_SECONDS = float(
+    _get_config_value(_ENV_VALUES, "OLLAMA_STARTUP_TIMEOUT_SECONDS") or "600"
 )
 ASSISTANT_CONFIG = AssistantConfig(
     name=_get_config_value(_ENV_VALUES, "AI_ASSISTANT_NAME") or "BlindAssist",
@@ -133,6 +152,83 @@ ASSISTANT_CONFIG = AssistantConfig(
     ),
 )
 AI_RESPONSE_LANGUAGE = ASSISTANT_CONFIG.response_language
+
+
+def _send_ollama_request(payload: dict, timeout: float) -> dict:
+    request = Request(
+        OLLAMA_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            raw_response = response.read().decode("utf-8")
+    except HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="ignore")
+        logger.exception("Ollama HTTP error | status=%s", exc.code)
+        raise RuntimeError(
+            f"Ollama request failed with status {exc.code}: {error_body}"
+        ) from exc
+    except URLError as exc:
+        logger.exception("Could not reach Ollama service")
+        raise RuntimeError(f"Could not connect to Ollama: {exc.reason}") from exc
+
+    try:
+        response_data = json.loads(raw_response)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Ollama returned an invalid JSON response") from exc
+
+    if response_data.get("error"):
+        raise RuntimeError(f"Ollama request failed: {response_data['error']}")
+
+    return response_data
+
+
+def preload_ollama_model() -> None:
+    """Load the configured model at server startup and keep it resident."""
+    logger.info(
+        "Preloading Ollama model | model=%s | keep_alive=%s",
+        MODEL_NAME,
+        OLLAMA_KEEP_ALIVE,
+    )
+    started_at = time.monotonic()
+    _send_ollama_request(
+        {
+            "model": MODEL_NAME,
+            "prompt": "",
+            "stream": False,
+            "keep_alive": OLLAMA_KEEP_ALIVE,
+        },
+        timeout=OLLAMA_STARTUP_TIMEOUT_SECONDS,
+    )
+    logger.info(
+        "Ollama model is ready | model=%s | load_time=%.1fs",
+        MODEL_NAME,
+        time.monotonic() - started_at,
+    )
+
+
+def unload_ollama_model() -> None:
+    """Release the model when the unified server shuts down cleanly."""
+    logger.info("Unloading Ollama model | model=%s", MODEL_NAME)
+    _send_ollama_request(
+        {
+            "model": MODEL_NAME,
+            "prompt": "",
+            "stream": False,
+            "keep_alive": 0,
+        },
+        timeout=30,
+    )
+    logger.info("Ollama model unloaded | model=%s", MODEL_NAME)
+
+
+def preload_speech_services() -> None:
+    """Load Whisper and Piper during startup to remove first-request latency."""
+    _get_stt()
+    _get_tts()
 
 
 def _normalize_content_type(content_type: str | None) -> str:
@@ -235,6 +331,8 @@ def _build_prompt(question: str) -> str:
             "guide dog, and real-world safety signals when appropriate.",
             f"- Respond only in {config.response_language}, using natural wording that "
             "is easy to understand when spoken aloud.",
+            "- Use short sentences and finish every sentence with punctuation so each "
+            "sentence can be spoken as soon as it is generated.",
             "",
             f"USER QUESTION: {question.strip()}",
         ]
@@ -253,35 +351,16 @@ def _ask_multimodal_model(question: str, image_bytes: bytes) -> str:
         "prompt": _build_prompt(question),
         "images": [image_base64],
         "stream": False,
+        "keep_alive": OLLAMA_KEEP_ALIVE,
     }
-
-    request = Request(
-        OLLAMA_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
 
     logger.info(
         "Sending multimodal request to Ollama | model=%s",
         MODEL_NAME,
     )
 
-    try:
-        with urlopen(request, timeout=180) as response:
-            raw_response = response.read().decode("utf-8")
-    except HTTPError as exc:
-        error_body = exc.read().decode("utf-8", errors="ignore")
-        logger.exception("Ollama HTTP error | status=%s", exc.code)
-        raise RuntimeError(
-            f"Ollama request failed with status {exc.code}: {error_body}"
-        ) from exc
-    except URLError as exc:
-        logger.exception("Could not reach Ollama service")
-        raise RuntimeError(f"Could not connect to Ollama: {exc.reason}") from exc
-
+    response_data = _send_ollama_request(payload, timeout=180)
     logger.info("Received raw response from Ollama")
-    response_data = json.loads(raw_response)
     answer = response_data.get("response", "").strip()
 
     if not answer:
@@ -292,51 +371,151 @@ def _ask_multimodal_model(question: str, image_bytes: bytes) -> str:
     return answer
 
 
-def process_recognize_request(
-    audio_bytes: bytes,
-    content_type: str | None = None,
-) -> bytes:
-    normalized_content_type = _normalize_content_type(content_type)
-    payload_size = len(audio_bytes)
+def _extract_complete_sentences(buffer: str) -> tuple[list[str], str]:
+    """Pop complete sentences from a partially streamed model response."""
+    sentences: list[str] = []
+    sentence_start = 0
+    index = 0
 
+    while index < len(buffer):
+        if buffer[index] not in SENTENCE_ENDINGS:
+            index += 1
+            continue
+
+        sentence_end = index + 1
+        while (
+            sentence_end < len(buffer)
+            and buffer[sentence_end] in SENTENCE_ENDINGS
+        ):
+            sentence_end += 1
+
+        sentence = buffer[sentence_start:sentence_end].strip()
+        if sentence:
+            sentences.append(sentence)
+        sentence_start = sentence_end
+        index = sentence_end
+
+    return sentences, buffer[sentence_start:].lstrip()
+
+
+def _stream_multimodal_sentences(
+    question: str,
+    image_bytes: bytes,
+) -> Iterator[str]:
+    """Yield complete sentences from Ollama's NDJSON token stream."""
+    image_base64 = base64.b64encode(image_bytes).decode("utf-8")
+    payload = {
+        "model": MODEL_NAME,
+        "prompt": _build_prompt(question),
+        "images": [image_base64],
+        "stream": True,
+        "keep_alive": OLLAMA_KEEP_ALIVE,
+    }
+    request = Request(
+        OLLAMA_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    buffered_text = ""
+    yielded_sentence = False
+
+    logger.info("Starting streamed Ollama response | model=%s", MODEL_NAME)
+    try:
+        with urlopen(request, timeout=180) as response:
+            for raw_line in response:
+                if not raw_line.strip():
+                    continue
+
+                try:
+                    response_data = json.loads(raw_line.decode("utf-8"))
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError(
+                        "Ollama returned an invalid streaming response"
+                    ) from exc
+
+                if response_data.get("error"):
+                    raise RuntimeError(
+                        f"Ollama request failed: {response_data['error']}"
+                    )
+
+                buffered_text += str(response_data.get("response") or "")
+                complete_sentences, buffered_text = _extract_complete_sentences(
+                    buffered_text
+                )
+                for sentence in complete_sentences:
+                    yielded_sentence = True
+                    logger.info("Ollama sentence ready | sentence=%s", sentence)
+                    yield sentence
+
+                if response_data.get("done"):
+                    break
+    except HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(
+            f"Ollama request failed with status {exc.code}: {error_body}"
+        ) from exc
+    except URLError as exc:
+        raise RuntimeError(f"Could not connect to Ollama: {exc.reason}") from exc
+
+    final_sentence = buffered_text.strip()
+    if final_sentence:
+        yielded_sentence = True
+        logger.info("Ollama final sentence ready | sentence=%s", final_sentence)
+        yield final_sentence
+
+    if not yielded_sentence:
+        raise RuntimeError("Multimodal model returned an empty answer")
+
+
+def _prepare_recognize_request(
+    audio_bytes: bytes,
+    content_type: str | None,
+) -> tuple[str, bytes, TemporaryDirectory]:
+    normalized_content_type = _normalize_content_type(content_type)
     logger.info(
         "Recognize pipeline started | content_type=%s | payload_size=%s bytes",
         normalized_content_type or "missing",
-        payload_size,
+        len(audio_bytes),
     )
 
     if normalized_content_type not in ALLOWED_CONTENT_TYPES:
-        logger.error("Unsupported recognize content type: %s", normalized_content_type)
         raise ValueError("Content-Type must be audio/wav")
-
     if not audio_bytes:
-        logger.error("Recognize payload is empty")
         raise ValueError("Audio payload is empty")
 
     last_image_bytes = load_last_image_bytes()
-
     if last_image_bytes is None:
-        logger.error("No last image is available for recognize pipeline")
         raise FileNotFoundError(
             "No last image is available yet. Call /api/videoframe first."
         )
 
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-
+    request_temp = TemporaryDirectory(prefix="recognize_", dir=RUNTIME_DIR)
     try:
-        with TemporaryDirectory(prefix="recognize_", dir=RUNTIME_DIR) as temp_dir:
+        audio_path = _save_audio_request(audio_bytes, Path(request_temp.name))
+        logger.info("Starting Speech-to-Text step")
+        question = _get_stt().transcribe(audio_path)
+        if not question:
+            raise RuntimeError("Speech-to-Text returned empty text")
+        logger.info("Speech-to-Text completed | question=%s", question)
+        return question, last_image_bytes, request_temp
+    except Exception:
+        request_temp.cleanup()
+        raise
+
+
+def process_recognize_request(
+    audio_bytes: bytes,
+    content_type: str | None = None,
+) -> bytes:
+    try:
+        question, last_image_bytes, request_temp = _prepare_recognize_request(
+            audio_bytes,
+            content_type,
+        )
+        with request_temp as temp_dir:
             request_dir = Path(temp_dir)
-            audio_path = _save_audio_request(audio_bytes, request_dir)
-
-            logger.info("Starting Speech-to-Text step")
-            question = _get_stt().transcribe(audio_path)
-
-            if not question:
-                logger.error("Speech-to-Text returned empty text")
-                raise RuntimeError("Speech-to-Text returned empty text")
-
-            logger.info("Speech-to-Text completed | question=%s", question)
-
             logger.info("Starting multimodal reasoning step")
             answer_text = _ask_multimodal_model(
                 question,
@@ -360,3 +539,47 @@ def process_recognize_request(
     except Exception:
         logger.exception("Recognize pipeline failed")
         raise
+
+
+def process_recognize_request_stream(
+    audio_bytes: bytes,
+    content_type: str | None = None,
+) -> Iterator[tuple[int, str, bytes]]:
+    """Return an iterator that yields each sentence's WAV as soon as it is ready."""
+    try:
+        question, last_image_bytes, request_temp = _prepare_recognize_request(
+            audio_bytes,
+            content_type,
+        )
+    except Exception:
+        logger.exception("Streaming recognize preparation failed")
+        raise
+
+    def generate_audio() -> Iterator[tuple[int, str, bytes]]:
+        try:
+            with request_temp as temp_dir:
+                request_dir = Path(temp_dir)
+                for index, sentence in enumerate(
+                    _stream_multimodal_sentences(question, last_image_bytes),
+                    start=1,
+                ):
+                    started_at = time.monotonic()
+                    output_path = request_dir / f"answer_{index:03d}.wav"
+                    generated_path = _get_tts().synthesize(
+                        sentence,
+                        output_path=output_path,
+                    )
+                    audio_bytes_for_sentence = generated_path.read_bytes()
+                    logger.info(
+                        "Streaming audio sentence ready | index=%s | size=%s bytes | "
+                        "tts_time=%.2fs",
+                        index,
+                        len(audio_bytes_for_sentence),
+                        time.monotonic() - started_at,
+                    )
+                    yield index, sentence, audio_bytes_for_sentence
+        except Exception:
+            logger.exception("Streaming recognize pipeline failed")
+            raise
+
+    return generate_audio()

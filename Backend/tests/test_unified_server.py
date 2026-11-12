@@ -1,9 +1,11 @@
 import http.client
+import base64
 import json
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import unified_server
 from Backend.database import BackendDatabase
@@ -101,6 +103,26 @@ class UnifiedServerTest(unittest.TestCase):
         self.assertEqual(200, status)
         self.assertEqual("audio/wav", content_type)
         self.assertEqual(unified_server.MOCK_REPLY, body)
+
+        status, content_type, body = self.request(
+            "POST",
+            "/api/recognize",
+            b"RIFFtestWAVE",
+            {
+                "Content-Type": "audio/wav",
+                "Accept": "application/x-ndjson, audio/wav",
+            },
+        )
+        self.assertEqual(200, status)
+        self.assertTrue(content_type.startswith("application/x-ndjson"))
+        stream_events = [json.loads(line) for line in body.splitlines()]
+        self.assertEqual("audio", stream_events[0]["type"])
+        self.assertEqual(
+            unified_server.MOCK_REPLY,
+            base64.b64decode(stream_events[0]["audio"]),
+        )
+        self.assertEqual("done", stream_events[1]["type"])
+        self.assertEqual(1, stream_events[1]["sentenceCount"])
 
         status, _, body = self.request("GET", "/api/health")
         self.assertEqual(200, status)
@@ -310,6 +332,40 @@ class UnifiedServerTest(unittest.TestCase):
         )
         self.assertEqual(400, status)
         self.assertIn(b"English or Chinese", body)
+
+
+class UnifiedServerLifecycleTest(unittest.TestCase):
+    def test_real_server_preloads_and_unloads_ollama_model(self):
+        from AiServer.Recognize import process as recognize_process
+
+        server = MagicMock()
+        server.serve_forever.side_effect = KeyboardInterrupt
+        original_ai_mode = unified_server.AI_MODE
+        unified_server.AI_MODE = "real"
+
+        try:
+            with (
+                patch("sys.argv", ["unified_server.py"]),
+                patch.object(unified_server.backend_api.database, "initialize"),
+                patch.object(
+                    unified_server,
+                    "ExclusiveThreadingHTTPServer",
+                    return_value=server,
+                ),
+                patch.object(recognize_process, "preload_ollama_model") as preload,
+                patch.object(recognize_process, "preload_speech_services") as speech,
+                patch.object(recognize_process, "unload_ollama_model") as unload,
+            ):
+                exit_code = unified_server.main()
+        finally:
+            unified_server.AI_MODE = original_ai_mode
+
+        self.assertEqual(0, exit_code)
+        preload.assert_called_once_with()
+        speech.assert_called_once_with()
+        unload.assert_called_once_with()
+        server.serve_forever.assert_called_once_with()
+        server.server_close.assert_called_once_with()
 
 
 if __name__ == "__main__":

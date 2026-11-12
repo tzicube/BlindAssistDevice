@@ -68,6 +68,10 @@ let recordingTicker = null;
 let isRecording = false;
 let currentResponseAudioBlob = null;
 let currentResponseAudioUrl = null;
+let streamingAudioQueue = [];
+let streamingAudioPlaying = false;
+let streamingResponseComplete = false;
+let streamingAudioTotalBytes = 0;
 
 elements.serverBaseUrl.value = DEFAULT_SERVER_BASE_URL;
 elements.videoframePath.value = DEFAULT_VIDEOFRAME_PATH;
@@ -475,8 +479,7 @@ async function powerOff() {
   elements.cameraPreview.srcObject = null;
   hasStreamedFrame = false;
   lastStreamErrorMessage = "";
-  elements.responseAudio.pause();
-  elements.responseAudio.currentTime = 0;
+  resetStreamingAudioPlayback();
 
   if (!recognizeRequestInFlight) {
     setStatus(elements.recognizeStatus, "Power dang tat. Bam Power de stream lai.", "idle");
@@ -554,8 +557,7 @@ async function startRecording() {
   }
 
   logActivity("Nhan nut Recognize lan 1. Dang bat microphone.", "info");
-  elements.responseAudio.pause();
-  elements.responseAudio.currentTime = 0;
+  resetStreamingAudioPlayback();
 
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: {
@@ -643,6 +645,162 @@ async function stopRecordingAndBuildWav() {
   };
 }
 
+function resetStreamingAudioPlayback() {
+  elements.responseAudio.pause();
+  elements.responseAudio.removeAttribute("src");
+  elements.responseAudio.onended = null;
+  elements.responseAudio.onerror = null;
+  elements.responseAudio.load();
+  streamingAudioQueue = [];
+  streamingAudioPlaying = false;
+  streamingResponseComplete = false;
+  streamingAudioTotalBytes = 0;
+  currentResponseAudioBlob = null;
+
+  if (currentResponseAudioUrl) {
+    URL.revokeObjectURL(currentResponseAudioUrl);
+    currentResponseAudioUrl = null;
+  }
+}
+
+function base64ToAudioBlob(encodedAudio, contentType = "audio/wav") {
+  const binaryAudio = window.atob(encodedAudio);
+  const audioBytes = new Uint8Array(binaryAudio.length);
+  for (let index = 0; index < binaryAudio.length; index += 1) {
+    audioBytes[index] = binaryAudio.charCodeAt(index);
+  }
+  return new Blob([audioBytes], { type: contentType });
+}
+
+async function playNextStreamingAudio() {
+  if (streamingAudioPlaying || !streamingAudioQueue.length) {
+    if (
+      streamingResponseComplete &&
+      !streamingAudioPlaying &&
+      !streamingAudioQueue.length
+    ) {
+      setStatus(
+        elements.recognizeStatus,
+        "Da phat xong toan bo cac cau tra loi.",
+        "ok"
+      );
+    }
+    return;
+  }
+
+  const nextAudio = streamingAudioQueue.shift();
+  streamingAudioPlaying = true;
+  currentResponseAudioBlob = nextAudio.blob;
+
+  if (currentResponseAudioUrl) {
+    URL.revokeObjectURL(currentResponseAudioUrl);
+  }
+  currentResponseAudioUrl = URL.createObjectURL(nextAudio.blob);
+  elements.responseAudio.src = currentResponseAudioUrl;
+  elements.responseAudio.load();
+
+  elements.responseAudio.onended = () => {
+    streamingAudioPlaying = false;
+    void playNextStreamingAudio();
+  };
+  elements.responseAudio.onerror = () => {
+    logActivity(`Khong phat duoc audio cau ${nextAudio.index}.`, "error");
+    streamingAudioPlaying = false;
+    void playNextStreamingAudio();
+  };
+
+  setStatus(
+    elements.recognizeStatus,
+    `Dang phat cau ${nextAudio.index} ngay khi server vua tao xong.`,
+    "ok"
+  );
+  updateResponseMeta(
+    `Cau ${nextAudio.index}: ${nextAudio.text} (${formatBytes(nextAudio.blob.size)})`
+  );
+
+  try {
+    await elements.responseAudio.play();
+  } catch (error) {
+    logActivity(
+      `Trinh duyet chan auto play (${error.message}). Bam Play de nghe cau hien tai.`,
+      "info"
+    );
+  }
+}
+
+function enqueueStreamingAudio(event) {
+  const audioBlob = base64ToAudioBlob(event.audio, event.contentType);
+  streamingAudioTotalBytes += audioBlob.size;
+  streamingAudioQueue.push({
+    index: event.index,
+    text: event.text || "",
+    blob: audioBlob,
+  });
+  logActivity(
+    `Da nhan audio cau ${event.index} (${formatBytes(audioBlob.size)}), dua vao hang phat.`,
+    "success"
+  );
+  void playNextStreamingAudio();
+}
+
+async function consumeStreamingAudioResponse(response, endpoint) {
+  if (!response.body) {
+    throw new Error("Trinh duyet khong ho tro doc response streaming");
+  }
+
+  resetStreamingAudioPlayback();
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let pendingText = "";
+  let receivedSentenceCount = 0;
+
+  const handleLine = (line) => {
+    if (!line.trim()) {
+      return;
+    }
+
+    const event = JSON.parse(line);
+    if (event.type === "audio") {
+      receivedSentenceCount += 1;
+      enqueueStreamingAudio(event);
+      return;
+    }
+    if (event.type === "done") {
+      streamingResponseComplete = true;
+      return;
+    }
+    if (event.type === "error") {
+      throw new Error(event.error || "Server streaming audio bi loi");
+    }
+  };
+
+  while (true) {
+    const { value, done } = await reader.read();
+    pendingText += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const lines = pendingText.split("\n");
+    pendingText = lines.pop() || "";
+    for (const line of lines) {
+      handleLine(line);
+    }
+    if (done) {
+      break;
+    }
+  }
+
+  if (pendingText.trim()) {
+    handleLine(pendingText);
+  }
+  streamingResponseComplete = true;
+  updateResponseMeta(
+    `Da nhan ${receivedSentenceCount} cau, tong ${formatBytes(streamingAudioTotalBytes)}. Audio duoc phat ngay theo tung cau.`
+  );
+  logActivity(
+    `POST ${endpoint} streaming thanh cong: ${receivedSentenceCount} cau, ${formatBytes(streamingAudioTotalBytes)}.`,
+    "success"
+  );
+  void playNextStreamingAudio();
+}
+
 async function sendRecognizeRequest(audioBlob, durationMs) {
   const endpoint = buildEndpoint(
     elements.serverBaseUrl.value,
@@ -662,13 +820,14 @@ async function sendRecognizeRequest(audioBlob, durationMs) {
       method: "POST",
       headers: {
         "Content-Type": "audio/wav",
+        "Accept": "application/x-ndjson, audio/wav",
       },
       body: audioBlob,
     });
 
     const contentType = response.headers.get("content-type") || "";
 
-    if (!response.ok || !contentType.includes("audio/wav")) {
+    if (!response.ok) {
       let message = `Server error: ${response.status}`;
 
       if (contentType.includes("application/json")) {
@@ -677,6 +836,20 @@ async function sendRecognizeRequest(audioBlob, durationMs) {
       }
 
       throw new Error(message);
+    }
+
+    if (contentType.includes("application/x-ndjson")) {
+      setStatus(
+        elements.recognizeStatus,
+        "Gemma dang tra loi. Moi cau se duoc phat ngay khi co audio...",
+        "busy"
+      );
+      await consumeStreamingAudioResponse(response, endpoint);
+      return;
+    }
+
+    if (!contentType.includes("audio/wav")) {
+      throw new Error(`Server tra ve Content-Type khong ho tro: ${contentType}`);
     }
 
     currentResponseAudioBlob = await response.blob();

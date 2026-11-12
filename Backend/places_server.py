@@ -27,7 +27,7 @@ class PlacesHandler(BaseHTTPRequestHandler):
             "Access-Control-Allow-Methods",
             "GET, POST, PUT, DELETE, OPTIONS",
         )
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept")
         super().end_headers()
 
     def do_OPTIONS(self):
